@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm --version:*)",
+      "Bash(npm install:*)",
+      "Bash(npm audit:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(powershell -Command \"Get-Content ''d:/musP/Eonix/Live-Projects/property-management-php-to-mern/real-cpanel-prov1/contracts/index.php'' | Select-Object -Skip 300 -First 200 | Out-String -Width 200\")"
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+==========================================
+Fix Other Applications (rashid, safeway1, newsabra)
+==========================================
+
+The issue: Database access denied or 500 errors after our changes.
+
+Quick fix (run on VPS):
+
+cd /var/www/html
+
+# 1. Grant database access to all databases
+mysql -u root -p'Tz@669933' << 'EOF'
+-- Grant access to newsabra
+GRANT ALL PRIVILEGES ON newsabra.* TO 'sidhyk'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Grant access to rashid (if database exists)
+GRANT ALL PRIVILEGES ON rashid.* TO 'sidhyk'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Grant access to safeway1 (if database exists)
+GRANT ALL PRIVILEGES ON safeway1.* TO 'sidhyk'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Grant access to safeway (if database exists)
+GRANT ALL PRIVILEGES ON safeway.* TO 'sidhyk'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Show all databases user has access to
+SELECT DISTINCT table_schema as 'Databases' 
+FROM information_schema.table_privileges 
+WHERE grantee = 'sidhyk@localhost';
+EOF
+
+# 2. Check Apache error log for specific errors
+tail -50 /var/log/apache2/error.log | grep -E "rashid|safeway|newsabra" | tail -20
+
+# 3. Restart Apache
+systemctl restart apache2
+
+==========================================
+Or use the diagnostic script:
+==========================================
+
+1. Copy scripts to VPS:
+   scp fix-other-apps-database-access.sh root@104.237.2.52:/root/
+   scp check-all-apps-status.sh root@104.237.2.52:/root/
+
+2. Run on VPS:
+   ssh root@104.237.2.52
+   bash /root/check-all-apps-status.sh
+   bash /root/fix-other-apps-database-access.sh
+
+==========================================
+This will:
+- Check which databases exist
+- Grant access to all databases for user 'sidhyk'
+- Verify access works
+- Show Apache errors for those apps
+
+==========================================
+
+

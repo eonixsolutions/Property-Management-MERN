@@ -1,0 +1,28 @@
+{
+  "name": "property-management-mern",
+  "version": "1.0.0",
+  "description": "MERN migration of real-cpanel-prov1 PHP property management system",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build": "npm run build:backend && npm run build:frontend",
+    "test:backend": "npm test --prefix backend",
+    "test": "npm run test:backend",
+    "lint:backend": "npm run lint --prefix backend",
+    "lint:frontend": "npm run lint --prefix frontend",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "typecheck:backend": "npm run typecheck --prefix backend",
+    "typecheck:frontend": "npm run typecheck --prefix frontend",
+    "typecheck": "npm run typecheck:backend && npm run typecheck:frontend",
+    "format": "npm run format --prefix backend && npm run format --prefix frontend",
+    "install:all": "npm install --prefix backend && npm install --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsconfig-paths": "^4.2.0"
+  }
+}

@@ -1,0 +1,40 @@
+==========================================
+Diagnose "Can't Add User" Issue on VPS
+==========================================
+
+The issue started after recent changes. Let's diagnose it:
+
+1. Copy diagnose-add-user-vps.php to VPS:
+   scp diagnose-add-user-vps.php root@104.237.2.52:/var/www/html/realestate/
+
+2. Access it in browser:
+   https://realestate.fmcqatar.com/diagnose-add-user-vps.php
+
+3. This will show you:
+   - Your current user role
+   - Which database columns exist
+   - If admin functions are available
+   - If INSERT query works
+   - What's missing
+
+4. Based on the diagnosis, run the appropriate fix:
+
+   If role/status columns are missing:
+   mysql -u sidhyk -p'Tz#669933' realestate << 'EOF'
+   ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('Super Admin', 'Admin', 'Manager', 'User', 'Viewer') DEFAULT 'User' AFTER last_name;
+   ALTER TABLE users ADD COLUMN IF NOT EXISTS status ENUM('Active', 'Inactive', 'Suspended') DEFAULT 'Active' AFTER role;
+   ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT NULL AFTER email;
+   UPDATE users SET role = 'Super Admin', status = 'Active' WHERE email = 'sidhykqatar@gmail.com';
+   EOF
+
+   If config.php is missing admin functions:
+   scp config/config.php root@104.237.2.52:/var/www/html/realestate/config/
+
+   If login.php is not storing role:
+   scp auth/login.php root@104.237.2.52:/var/www/html/realestate/auth/
+
+5. After fixing, log out and log back in!
+
+==========================================
+
+

@@ -1,0 +1,44 @@
+==========================================
+Fix: Can't Add Property Type "Studio"
+==========================================
+
+The issue: The database ENUM for property_type doesn't include "Studio" and other types.
+
+Quick fix (run on VPS):
+
+cd /var/www/html/realestate
+
+mysql -u sidhyk -p'Tz#669933' realestate << 'EOF'
+ALTER TABLE properties MODIFY COLUMN property_type ENUM(
+    'Apartment', 
+    'Villa', 
+    'House', 
+    'Condo', 
+    'Townhouse', 
+    'Studio', 
+    'Penthouse', 
+    'Commercial', 
+    'Office', 
+    'Shop', 
+    'Warehouse', 
+    'Land', 
+    'Other'
+) NOT NULL;
+EOF
+
+==========================================
+Or use the script:
+==========================================
+
+1. Copy script to VPS:
+   scp fix-property-type-vps.sh root@104.237.2.52:/root/
+
+2. Run on VPS:
+   ssh root@104.237.2.52
+   bash /root/fix-property-type-vps.sh
+
+==========================================
+After running, try adding a Studio property again!
+==========================================
+
+

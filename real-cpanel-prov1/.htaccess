@@ -1,0 +1,40 @@
+# Enable Rewrite Engine
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # HTTPS redirect - Disabled for XAMPP local development
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# Security - Prevent access to sensitive files
+<FilesMatch "^(config|database|includes)">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(env|log|ini|conf)$">
+    Require all denied
+</FilesMatch>
+
+# Prevent directory listing
+Options -Indexes
+
+# Protect setup file (delete after setup)
+<Files "setup.php">
+    Require all denied
+</Files>
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# PHP Security Settings
+<IfModule mod_php7.c>
+    php_flag display_errors On  # Enabled for XAMPP development
+    php_flag log_errors On
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure 0  # Disabled for XAMPP local development (HTTP)
+</IfModule>

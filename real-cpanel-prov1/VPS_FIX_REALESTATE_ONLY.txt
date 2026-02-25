@@ -1,0 +1,50 @@
+==========================================
+Fix Realestate Database Access
+==========================================
+
+Issue: realestate.fmcqatar.com shows "Access denied for user 'sidhyk'@'localhost' to database 'realestate'"
+
+Other programs (newsabra, rashid, safeway1) are working fine.
+
+==========================================
+QUICK FIX (Run on VPS):
+==========================================
+
+# Fix realestate database access
+mysql -u root -p'Tz@669933' << 'EOF'
+-- Ensure database exists
+CREATE DATABASE IF NOT EXISTS realestate CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Grant access
+GRANT ALL PRIVILEGES ON realestate.* TO 'sidhyk'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Verify
+SELECT 'Access granted to realestate database' as Status;
+EOF
+
+# Restart Apache
+systemctl restart apache2
+
+==========================================
+OR USE SCRIPT:
+==========================================
+
+1. Copy script to VPS:
+   scp fix-realestate-database.sh root@104.237.2.52:/root/
+
+2. Run on VPS:
+   ssh root@104.237.2.52
+   bash /root/fix-realestate-database.sh
+
+==========================================
+VERIFY IT WORKS:
+==========================================
+
+After running the fix, test:
+https://realestate.fmcqatar.com/landing.php
+
+Should work now!
+
+==========================================
+

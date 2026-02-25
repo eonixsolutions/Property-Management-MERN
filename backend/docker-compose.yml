@@ -1,0 +1,94 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Development Docker Compose
+#
+# Services:
+#   api      → Express backend (hot-reload via tsx watch)
+#   mongo    → MongoDB 7 (persistent volume)
+#   mongo-express → Web UI for inspecting MongoDB (dev only)
+#
+# Usage:
+#   docker compose up          → start all services
+#   docker compose up api      → start only the API (assumes mongo is running)
+#   docker compose down -v     → stop all + remove volumes
+#   docker compose logs -f api → tail API logs
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── MongoDB ────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7-jammy
+    container_name: property_mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: property_db
+    volumes:
+      - mongo_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Express API ────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development          # Uses the dev stage (tsx watch)
+    container_name: property_api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - '${PORT:-3000}:3000'
+    env_file:
+      - .env
+    environment:
+      # Override DB URI to use Docker service name
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-password}@mongo:27017/property_db?authSource=admin
+      NODE_ENV: development
+    volumes:
+      # Mount source for hot reload
+      - ./src:/app/src:ro
+      # Persist uploads directory
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/health/ping']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Mongo Express (Web UI — dev only) ─────────────────────────────────────
+  mongo-express:
+    image: mongo-express:1-20-alpine3.19
+    container_name: property_mongo_ui
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - '8081:8081'
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USER:-admin}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-password}@mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_USERNAME:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_PASSWORD:-admin}
+    profiles:
+      - tools                      # Only starts with: docker compose --profile tools up
+
+volumes:
+  mongo_data:
+    driver: local
+  uploads_data:
+    driver: local

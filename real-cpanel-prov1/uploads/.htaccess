@@ -1,0 +1,7 @@
+# Prevent direct access to uploads directory listing
+Options -Indexes
+
+# Allow only specific file types
+<FilesMatch "\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)$">
+    Require all granted
+</FilesMatch>

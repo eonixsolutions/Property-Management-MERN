@@ -1,0 +1,32 @@
+==========================================
+Quick Fix: Can't Add User (Was Working Before)
+==========================================
+
+Since it was working before, the issue is likely the role column check failing.
+
+Run this on your VPS:
+
+cd /var/www/html/realestate
+
+mysql -u sidhyk -p'Tz#669933' realestate << 'EOF'
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('Super Admin', 'Admin', 'Manager', 'User', 'Viewer') DEFAULT 'User' AFTER last_name;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status ENUM('Active', 'Inactive', 'Suspended') DEFAULT 'Active' AFTER role;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT NULL AFTER email;
+UPDATE users SET role = 'Super Admin', status = 'Active' WHERE email = 'sidhykqatar@gmail.com';
+SELECT id, email, role, status FROM users WHERE email = 'sidhykqatar@gmail.com';
+EOF
+
+==========================================
+IMPORTANT: After running, LOG OUT and LOG BACK IN!
+==========================================
+
+This will:
+1. Add role column (if missing)
+2. Add status column (if missing)  
+3. Add phone column (if missing)
+4. Set your user to Super Admin
+5. Show your current status
+
+Then try adding a user again!
+
+

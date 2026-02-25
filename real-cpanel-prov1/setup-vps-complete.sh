@@ -1,0 +1,82 @@
+#!/bin/bash
+# Complete VPS Setup Script
+# Run this directly on the VPS: ssh root@104.237.2.52
+# Then: bash setup-vps-complete.sh
+
+set -e
+
+DB_NAME="realestate"
+DB_USER="sidhyk"
+DB_PASS="Tz#669933"
+VPS_PATH="/var/www/html/realestate"
+DOMAIN="realestate.fmcqatar.com"
+
+echo "=========================================="
+echo "Complete VPS Setup"
+echo "=========================================="
+echo "Domain: $DOMAIN"
+echo "Database: $DB_NAME"
+echo "DB User: $DB_USER"
+echo "=========================================="
+echo ""
+
+# Step 1: Create database and user
+echo "Step 1: Creating database and user..."
+mysql -u root -p'Tz@669933' <<EOF
+CREATE DATABASE IF NOT EXISTS $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+DROP USER IF EXISTS '$DB_USER'@'localhost';
+CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+SELECT 'Database and user created successfully!' as Status;
+EOF
+
+echo "✓ Database created"
+echo ""
+
+# Step 2: Backup existing folder
+echo "Step 2: Backing up existing folder (if exists)..."
+if [ -d "$VPS_PATH" ]; then
+    BACKUP_DIR="/var/www/html/realestate_backup_$(date +%Y%m%d_%H%M%S)"
+    echo "  Backing up to: $BACKUP_DIR"
+    mv "$VPS_PATH" "$BACKUP_DIR"
+    echo "✓ Backed up to: $BACKUP_DIR"
+else
+    echo "✓ No existing folder to backup"
+fi
+echo ""
+
+# Step 3: Create directory
+echo "Step 3: Creating directory structure..."
+mkdir -p "$VPS_PATH"
+chown -R www-data:www-data "$VPS_PATH"
+chmod -R 755 "$VPS_PATH"
+echo "✓ Directory created"
+echo ""
+
+echo "=========================================="
+echo "Next Steps:"
+echo "=========================================="
+echo "1. Copy all files from local machine to: $VPS_PATH"
+echo "   From Windows PowerShell:"
+echo "   scp -r * root@104.237.2.52:$VPS_PATH/"
+echo ""
+echo "2. After files are copied, run on VPS:"
+echo "   cd $VPS_PATH"
+echo ""
+echo "3. Update config files:"
+echo "   sed -i \"s/define('DB_NAME', '[^']*');/define('DB_NAME', '$DB_NAME');/\" config/database.php"
+echo "   sed -i \"s/define('DB_USER', '[^']*');/define('DB_USER', '$DB_USER');/\" config/database.php"
+echo "   sed -i \"s/define('DB_PASS', '[^']*');/define('DB_PASS', '$DB_PASS');/\" config/database.php"
+echo "   sed -i \"s|define('BASE_URL', '[^']*');|define('BASE_URL', 'https://$DOMAIN');|\" config/config.php"
+echo ""
+echo "4. Import database:"
+echo "   mysql -u $DB_USER -p'$DB_PASS' $DB_NAME < database/schema.sql"
+echo ""
+echo "5. Set permissions:"
+echo "   chown -R www-data:www-data $VPS_PATH"
+echo "   find $VPS_PATH -type f -exec chmod 644 {} \\;"
+echo "   find $VPS_PATH -type d -exec chmod 755 {} \\;"
+echo ""
+echo "=========================================="
+

@@ -1,0 +1,45 @@
+# ── Environment ──────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!**/.env.example
+!**/.env.*.example
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+backend/dist/
+frontend/dist/
+frontend/.vite/
+
+# ── Test / Coverage ───────────────────────────────────────────────────────────
+coverage/
+**/coverage/
+.nyc_output/
+
+# ── Uploads (runtime) ─────────────────────────────────────────────────────────
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+
+# ── TypeScript ────────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── PHP source (read-only reference) ─────────────────────────────────────────
+# real-cpanel-prov1/  ← kept as reference, not deployed

@@ -1,0 +1,53 @@
+==========================================
+Quick Fix: Generate Owner Payments
+==========================================
+
+Run this on your VPS:
+
+cd /var/www/html/realestate
+
+# First, check if owner_payments table exists and has data
+mysql -u sidhyk -p'Tz#669933' realestate -e "
+SELECT 'Properties with owner rent:' as Info;
+SELECT id, property_name, owner_name, monthly_rent_to_owner, owner_rent_start_date 
+FROM properties 
+WHERE monthly_rent_to_owner IS NOT NULL AND monthly_rent_to_owner > 0;
+
+SELECT 'Owner payments count:' as Info;
+SELECT COUNT(*) as total FROM owner_payments;
+"
+
+# If no payments exist, create a simple PHP script to generate them
+cat > /tmp/gen_payments.php << 'EOF'
+<?php
+require_once '/var/www/html/realestate/config/config.php';
+require_once '/var/www/html/realestate/includes/recurring_owner_payments.php';
+$conn = getDBConnection();
+$props = $conn->query("SELECT id, property_name, owner_rent_start_date FROM properties WHERE monthly_rent_to_owner > 0 AND user_id = 1");
+while ($p = $props->fetch_assoc()) {
+    $count = generateRecurringOwnerPayments($p['id'], $conn, $p['owner_rent_start_date']);
+    echo $p['property_name'] . ": Generated $count payments\n";
+}
+closeDBConnection($conn);
+?>
+EOF
+
+# Run it
+php /tmp/gen_payments.php
+
+# Clean up
+rm /tmp/gen_payments.php
+
+# Verify payments were created
+mysql -u sidhyk -p'Tz#669933' realestate -e "
+SELECT 'Owner payments by property:' as Info;
+SELECT p.property_name, COUNT(*) as payments, SUM(op.amount) as total 
+FROM owner_payments op 
+JOIN properties p ON op.property_id = p.id 
+GROUP BY p.id, p.property_name;
+"
+
+==========================================
+After running this, refresh the reports page
+==========================================
+
