@@ -25,6 +25,8 @@ export enum UserStatus {
 
 /** Raw document shape (what Mongoose stores) */
 export interface IUser {
+  firstName?: string;
+  lastName?: string;
   email: string;
   password: string;
   role: UserRole;
@@ -52,6 +54,18 @@ const BCRYPT_ROUNDS = 12;
 
 const userSchema = new mongoose.Schema<IUser, UserModel, IUserMethods>(
   {
+    firstName: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+
+    lastName: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+
     email: {
       type: String,
       required: [true, 'Email is required'],
@@ -103,6 +117,19 @@ const userSchema = new mongoose.Schema<IUser, UserModel, IUserMethods>(
     versionKey: false,
   },
 );
+
+// ── Virtuals ─────────────────────────────────────────────
+
+//enable virtuals in toJSON and toObject output (e.g. when returning API responses or doing .lean())
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
+
+// Virtual for full name (not stored in DB, but useful for API responses)
+userSchema.virtual('fullName').get(function () {
+  return [this.firstName, this.lastName]
+    .filter(Boolean)
+    .join(' ');
+});
 
 // ── Instance methods ────────────────────────────────────────────────────────
 

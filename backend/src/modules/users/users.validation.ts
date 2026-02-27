@@ -8,6 +8,18 @@ import { UserRole, UserStatus } from '@models/user.model';
 // ── Create ──────────────────────────────────────────────────────────────────
 
 export const createUserSchema = z.object({
+  firstName: z
+    .string({ required_error: 'First name is required' })
+    .trim()
+    .min(1, 'First name is required')
+    .max(100, 'First name is too long'),
+
+  lastName: z
+    .string({ required_error: 'Last name is required' })
+    .trim()
+    .min(1, 'Last name is required')
+    .max(100, 'Last name is too long'),
+
   email: z
     .string({ required_error: 'Email is required' })
     .trim()
@@ -34,6 +46,20 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 // ── Update ──────────────────────────────────────────────────────────────────
 
 const updateUserBase = z.object({
+  firstName: z
+  .string()
+  .trim()
+  .min(1, 'First name cannot be empty')
+  .max(100, 'First name is too long')
+  .optional(),
+
+  lastName: z
+    .string()
+    .trim()
+    .min(1, 'Last name cannot be empty')
+    .max(100, 'Last name is too long')
+    .optional(),
+
   email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
 
   password: z

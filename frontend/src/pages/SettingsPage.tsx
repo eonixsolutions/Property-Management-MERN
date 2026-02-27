@@ -5,15 +5,21 @@ import { settingsApi } from '@api/settings.api';
 // ── Currency & timezone options ───────────────────────────────────────────────
 
 const CURRENCIES: { code: string; label: string }[] = [
-  { code: 'QAR', label: 'QAR — Qatari Riyal' },
-  { code: 'AED', label: 'AED — UAE Dirham' },
-  { code: 'SAR', label: 'SAR — Saudi Riyal' },
-  { code: 'BHD', label: 'BHD — Bahraini Dinar' },
-  { code: 'KWD', label: 'KWD — Kuwaiti Dinar' },
-  { code: 'OMR', label: 'OMR — Omani Rial' },
-  { code: 'USD', label: 'USD — US Dollar' },
-  { code: 'EUR', label: 'EUR — Euro' },
-  { code: 'GBP', label: 'GBP — British Pound' },
+  { code: 'QAR', label: 'QAR — Qatari Riyal (ر.ق)' },
+  { code: 'SAR', label: 'SAR — Saudi Riyal (ر.س)' },
+  { code: 'AED', label: 'AED — UAE Dirham (د.إ)' },
+  { code: 'BHD', label: 'BHD — Bahraini Dinar (.د.ب)' },
+  { code: 'KWD', label: 'KWD — Kuwaiti Dinar (د.ك)' },
+  { code: 'OMR', label: 'OMR — Omani Rial (ر.ع.)' },
+  { code: 'USD', label: 'USD — US Dollar ($)' },
+  { code: 'EUR', label: 'EUR — Euro (€)' },
+  { code: 'GBP', label: 'GBP — British Pound (£)' },
+  { code: 'CAD', label: 'CAD — Canadian Dollar (C$)' },
+  { code: 'AUD', label: 'AUD — Australian Dollar (A$)' },
+  { code: 'JPY', label: 'JPY — Japanese Yen (¥)' },
+  { code: 'INR', label: 'INR — Indian Rupee (₹)' },
+  { code: 'PKR', label: 'PKR — Pakistani Rupee (₨)' },
+  { code: 'EGP', label: 'EGP — Egyptian Pound (E£)' },
 ];
 
 const TIMEZONES: { zone: string; label: string }[] = [

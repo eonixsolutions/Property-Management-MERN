@@ -13,6 +13,9 @@ export interface ApiUser {
   phone?: string;
   createdAt: string;
   updatedAt: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
 }
 
 export interface PaginationMeta {
@@ -29,6 +32,8 @@ export interface CreateUserInput {
   password: string;
   role?: UserRole;
   phone?: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface UpdateUserInput {
@@ -37,6 +42,8 @@ export interface UpdateUserInput {
   role?: UserRole;
   status?: UserStatus;
   phone?: string | null; // null clears the field
+  firstName?: string;
+  lastName?: string;
 }
 
 // ── API wrappers ──────────────────────────────────────────────────────────────

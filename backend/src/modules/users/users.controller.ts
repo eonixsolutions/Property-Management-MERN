@@ -33,7 +33,7 @@ export const listUsers: RequestHandler = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
 
   const [users, total] = await Promise.all([
-    User.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    User.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean({ virtuals: true }),
     User.countDocuments(),
   ]);
 
@@ -53,7 +53,8 @@ export const listUsers: RequestHandler = asyncHandler(async (req, res) => {
  *  - Password is auto-hashed by the pre-save hook; never stored in plain text
  */
 export const createUser: RequestHandler = asyncHandler(async (req, res) => {
-  const { email, password, role, phone } = createUserSchema.parse(req.body);
+  const { email, password, role, phone, firstName, lastName } =
+  createUserSchema.parse(req.body);
 
   // Only SUPER_ADMIN may create another SUPER_ADMIN
   if (role === UserRole.SUPER_ADMIN && req.user!.role !== UserRole.SUPER_ADMIN) {
@@ -72,6 +73,8 @@ export const createUser: RequestHandler = asyncHandler(async (req, res) => {
     role: role ?? UserRole.STAFF,
     status: UserStatus.ACTIVE,
     phone,
+    firstName,
+    lastName,
   });
 
   // Create default settings (1:1 with user, mirrors register endpoint)
@@ -111,6 +114,8 @@ export const updateUser: RequestHandler = asyncHandler(async (req, res) => {
   const user = await User.findById(id);
   if (!user) throw ApiError.notFound('User');
 
+  if (updates.firstName !== undefined) user.firstName = updates.firstName;
+  if (updates.lastName !== undefined) user.lastName = updates.lastName;
   if (updates.email !== undefined) user.email = updates.email;
   if (updates.role !== undefined) user.role = updates.role;
   if (updates.status !== undefined) user.status = updates.status;
@@ -120,7 +125,7 @@ export const updateUser: RequestHandler = asyncHandler(async (req, res) => {
   await user.save();
 
   // Re-fetch as plain object so toJSON transform strips password
-  const updated = await User.findById(id).lean();
+  const updated = await User.findById(id).lean({ virtuals: true });
   return ApiResponse.ok(res, { user: updated }, 'User updated successfully');
 });
 

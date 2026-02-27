@@ -42,10 +42,14 @@ const settingsSchema = new mongoose.Schema<ISettings>(
 
     currency: {
       type: String,
+      enum: [
+        'QAR','SAR','AED','BHD','KWD','OMR',
+        'USD','EUR','GBP','CAD','AUD',
+        'JPY','INR','PKR','EGP'
+      ],
       default: 'QAR',
       trim: true,
       uppercase: true,
-      maxlength: [3, 'Currency must be a 3-letter ISO 4217 code'],
     },
 
     timezone: {

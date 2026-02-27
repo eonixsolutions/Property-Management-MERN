@@ -25,7 +25,7 @@ const s = {
   pageBtn: { padding: '0.35rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '0.8rem' },
   // Modal overlay
   overlay: { position: 'fixed' as const, inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 },
-  modal: { backgroundColor: '#fff', borderRadius: '8px', padding: '2rem', width: '420px', maxWidth: '90vw', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' },
+  modal: { backgroundColor: '#fff', borderRadius: '8px', padding: '2rem', width: '420px', maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' },
   modalTitle: { fontSize: '1.1rem', fontWeight: 700, color: '#1a1a2e', marginBottom: '1.25rem' },
   field: { marginBottom: '0.875rem' },
   label: { display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.3rem' },
@@ -83,19 +83,40 @@ interface ModalState {
 }
 
 interface FormState {
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
+  confirmPassword: string;
   role: UserRole | '';
   status: 'ACTIVE' | 'SUSPENDED';
   phone: string;
 }
 
 function emptyForm(): FormState {
-  return { email: '', password: '', role: '', status: 'ACTIVE', phone: '' };
+  return {
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    role: '',
+    status: 'ACTIVE',
+    phone: '',
+  };
 }
 
 function formFromUser(u: ApiUser): FormState {
-  return { email: u.email, password: '', role: u.role, status: u.status, phone: u.phone ?? '' };
+  return {
+    firstName: u.firstName ?? '',
+    lastName: u.lastName ?? '',
+    email: u.email,
+    password: '',
+    confirmPassword: '',
+    role: u.role,
+    status: u.status,
+    phone: u.phone ?? '',
+  };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -165,10 +186,26 @@ export default function UsersPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
-    setSubmitting(true);
+      setSubmitting(true);
+      // Validate passwords match for add, and for edit when a new password was entered
+      if (modal?.mode === 'add') {
+        if (form.password !== form.confirmPassword) {
+          setFormError('Passwords do not match.');
+          setSubmitting(false);
+          return;
+        }
+      } else if (modal?.mode === 'edit' && form.password) {
+        if (form.password !== form.confirmPassword) {
+          setFormError('Passwords do not match.');
+          setSubmitting(false);
+          return;
+        }
+      }
     try {
       if (modal?.mode === 'add') {
         const payload: CreateUserInput = {
+          firstName: form.firstName,
+          lastName: form.lastName,
           email: form.email,
           password: form.password,
           phone: form.phone || undefined,
@@ -177,6 +214,8 @@ export default function UsersPage() {
         await usersApi.create(payload);
       } else if (modal?.mode === 'edit' && modal.target) {
         const payload: UpdateUserInput = {
+          firstName: form.firstName,
+          lastName: form.lastName,
           email: form.email || undefined,
           phone: form.phone || undefined,
           status: form.status,
@@ -232,6 +271,7 @@ export default function UsersPage() {
           <table style={s.table}>
             <thead>
               <tr>
+                <th style={s.th}>Name</th>
                 <th style={s.th}>Email</th>
                 <th style={s.th}>Role</th>
                 <th style={s.th}>Status</th>
@@ -247,11 +287,18 @@ export default function UsersPage() {
                 </tr>
               ) : (
                 users.map((u) => {
-                  const isSelf = u._id === currentUser?.id;
-                  const canDelete = isSuperAdmin && !isSelf;
+                  //const isSelf = u._id === currentUser?.id;
+                  //const canDelete = isSuperAdmin && !isSelf;
+                  const canDelete =
+                    isSuperAdmin &&
+                    !!currentUser &&
+                    u._id !== currentUser.id;
 
                   return (
                     <tr key={u._id}>
+                      <td style={s.td}>
+                        {u.fullName ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim()}
+                      </td>
                       <td style={s.td}>{u.email}</td>
                       <td style={s.td}>
                         <span style={roleBadgeStyle(u.role)}>{u.role.replace('_', ' ')}</span>
@@ -321,6 +368,32 @@ export default function UsersPage() {
 
             <form onSubmit={(e) => void handleSubmit(e)}>
               <div style={s.field}>
+                <label style={s.label} htmlFor="u-firstName">First Name</label>
+                <input
+                  id="u-firstName"
+                  style={s.input}
+                  type="text"
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  required
+                  disabled={submitting}
+                />
+              </div>
+
+              <div style={s.field}>
+                <label style={s.label} htmlFor="u-lastName">Last Name</label>
+                <input
+                  id="u-lastName"
+                  style={s.input}
+                  type="text"
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  required
+                  disabled={submitting}
+                />
+              </div>
+
+              <div style={s.field}>
                 <label style={s.label} htmlFor="u-email">Email</label>
                 <input
                   id="u-email"
@@ -344,6 +417,20 @@ export default function UsersPage() {
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   required={modal.mode === 'add'}
+                  autoComplete="new-password"
+                  disabled={submitting}
+                />
+              </div>
+
+              <div style={s.field}>
+                <label style={s.label} htmlFor="u-password-confirm">Confirm Password</label>
+                <input
+                  id="u-password-confirm"
+                  style={s.input}
+                  type="password"
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                  required={modal.mode === 'add' || !!form.password}
                   autoComplete="new-password"
                   disabled={submitting}
                 />
@@ -417,7 +504,9 @@ export default function UsersPage() {
             <h2 style={s.modalTitle}>Delete User</h2>
             <p style={s.confirmText}>
               Are you sure you want to permanently delete{' '}
-              <strong>{confirmDelete.email}</strong>? This action cannot be undone.
+              <strong>
+                {confirmDelete.fullName ?? confirmDelete.email}
+              </strong>? This action cannot be undone.
             </p>
             {deleteError && <div style={{ ...s.errorBanner, marginBottom: '1rem' }}>{deleteError}</div>}
             <div style={s.modalActions}>
