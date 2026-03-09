@@ -79,6 +79,54 @@ export const updateOwnerChequeStatusSchema = z.object({
 
 export type UpdateOwnerChequeStatusInput = z.infer<typeof updateOwnerChequeStatusSchema>;
 
+// ── Full Update Schemas ────────────────────────────────────────────────────
+
+export const updateTenantChequeSchema = z.object({
+  chequeNumber: z.string().trim().min(1).optional(),
+  bankName: z.string().trim().optional().nullable(),
+  chequeAmount: z
+    .number({ invalid_type_error: 'chequeAmount must be a number' })
+    .min(0, 'chequeAmount must be non-negative')
+    .optional(),
+  chequeDate: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: 'chequeDate must be a valid date' })
+    .optional(),
+  depositDate: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: 'depositDate must be a valid date' })
+    .optional()
+    .nullable(),
+  status: z.enum(['Pending', 'Deposited', 'Bounced', 'Cleared']).optional(),
+  notes: z.string().trim().optional().nullable(),
+  rentPaymentId: z.string().optional().nullable(),
+});
+
+export type UpdateTenantChequeInput = z.infer<typeof updateTenantChequeSchema>;
+
+export const updateOwnerChequeSchema = z.object({
+  chequeNumber: z.string().trim().min(1).optional(),
+  bankName: z.string().trim().optional().nullable(),
+  chequeAmount: z
+    .number({ invalid_type_error: 'chequeAmount must be a number' })
+    .min(0, 'chequeAmount must be non-negative')
+    .optional(),
+  chequeDate: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: 'chequeDate must be a valid date' })
+    .optional(),
+  issueDate: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: 'issueDate must be a valid date' })
+    .optional()
+    .nullable(),
+  status: z.enum(['Issued', 'Cleared', 'Bounced', 'Cancelled']).optional(),
+  notes: z.string().trim().optional().nullable(),
+  ownerPaymentId: z.string().optional().nullable(),
+});
+
+export type UpdateOwnerChequeInput = z.infer<typeof updateOwnerChequeSchema>;
+
 // ── Owner Cheques Bulk ─────────────────────────────────────────────────────
 
 export const createOwnerChequesBulkSchema = z

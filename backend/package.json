@@ -20,7 +20,12 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "seed": "tsx src/scripts/seed.ts"
+    "seed": "tsx src/scripts/seed.ts",
+    "seed:properties": "tsx src/scripts/seed-properties.ts",
+    "seed:tenants": "tsx src/scripts/seed-tenants.ts",
+    "seed:rent-payments": "tsx src/scripts/seed-rent-payments.ts",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
+    "migrate": "tsx src/scripts/migrate-from-mysql.ts"
   },
   "dependencies": {
     "@types/multer": "^2.0.0",

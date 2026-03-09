@@ -3,8 +3,17 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 import { tenantsApi } from '@api/tenants.api';
 import type { ApiTenant, ApiRentPayment, TenantStatus, RentPaymentStatus } from '@api/tenants.api';
+import { rentPaymentsApi } from '@api/rent-payments.api';
+import { propertiesApi } from '@api/properties.api';
+import type { ApiProperty } from '@api/properties.api';
 import { documentsApi, formatFileSize } from '@api/documents.api';
 import type { ApiDocument, DocumentType } from '@api/documents.api';
+import { chequesApi } from '@api/cheques.api';
+import type { ApiTenantCheque, TenantChequeStatus } from '@api/cheques.api';
+import { maintenanceApi } from '@api/maintenance.api';
+import type { ApiMaintenanceRequest, MaintenancePriority, MaintenanceStatus } from '@api/maintenance.api';
+import { transactionsApi } from '@api/transactions.api';
+import type { ApiTransaction, TransactionType } from '@api/transactions.api';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -336,8 +345,13 @@ export default function TenantDetailPage() {
   const navigate = useNavigate();
 
   const [tenant, setTenant] = useState<ApiTenant | null>(null);
+  const [property, setProperty] = useState<ApiProperty | null>(null);
+  const [masterProperty, setMasterProperty] = useState<ApiProperty | null>(null);
   const [payments, setPayments] = useState<ApiRentPayment[]>([]);
   const [tenantDocuments, setTenantDocuments] = useState<ApiDocument[]>([]);
+  const [tenantCheques, setTenantCheques] = useState<ApiTenantCheque[]>([]);
+  const [tenantMaintenance, setTenantMaintenance] = useState<ApiMaintenanceRequest[]>([]);
+  const [tenantTransactions, setTenantTransactions] = useState<ApiTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -345,6 +359,8 @@ export default function TenantDetailPage() {
   const [editForm, setEditForm] = useState<EditFormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [confirmPayTarget, setConfirmPayTarget] = useState<ApiRentPayment | null>(null);
 
   // ── Load tenant + payments ───────────────────────────────────────────────
   useEffect(() => {
@@ -356,15 +372,54 @@ export default function TenantDetailPage() {
       .then(([t, p]) => {
         setTenant(t);
         setPayments(p);
+        // Load property details (best-effort, non-blocking)
+        propertiesApi.get(t.propertyId).then((prop) => {
+          setProperty(prop);
+          if (prop.type === 'unit' && prop.parentPropertyId) {
+            propertiesApi.get(prop.parentPropertyId).then(setMasterProperty).catch(() => {});
+          }
+        }).catch(() => {});
         // Load documents for this tenant (best-effort, non-blocking)
         documentsApi
           .list({ tenantId: id, limit: 5 })
           .then(({ documents }) => setTenantDocuments(documents))
           .catch(() => {});
+        // Load cheques for this tenant (best-effort, non-blocking)
+        chequesApi
+          .listTenant({ tenantId: id, limit: 100 })
+          .then(({ cheques }) => setTenantCheques(cheques))
+          .catch(() => {});
+        // Load maintenance requests for this tenant (best-effort, non-blocking)
+        maintenanceApi
+          .list({ tenantId: id, limit: 100 })
+          .then(({ requests }) => setTenantMaintenance(requests))
+          .catch(() => {});
+        // Load transactions for this tenant (best-effort, non-blocking)
+        transactionsApi
+          .list({ tenantId: id, limit: 50 })
+          .then(({ transactions }) => setTenantTransactions(transactions))
+          .catch(() => {});
       })
       .catch(() => setError('Failed to load tenant. Please go back and try again.'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // ── Mark payment as paid ─────────────────────────────────────────────────
+  async function handleMarkPaid(paymentId: string) {
+    setMarkingPaidId(paymentId);
+    try {
+      const updated = await rentPaymentsApi.update(paymentId, {
+        status: 'Paid',
+        paidDate: new Date().toISOString(),
+      });
+      setPayments((prev) => prev.map((p) => (p._id === paymentId ? { ...p, ...updated } : p)));
+      setConfirmPayTarget(null);
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }
 
   // ── Edit modal ───────────────────────────────────────────────────────────
   function openEdit() {
@@ -470,10 +525,88 @@ export default function TenantDetailPage() {
             )}
           </div>
         </div>
-        <button style={s.editBtn} type="button" onClick={openEdit}>
-          Edit
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+          <Link
+            to={`/contracts?create=1&tenantId=${tenant._id}`}
+            style={{
+              padding: '0.45rem 1rem',
+              backgroundColor: '#059669',
+              color: '#fff',
+              borderRadius: '4px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap' as const,
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            Generate Contract
+          </Link>
+          <button style={s.editBtn} type="button" onClick={openEdit}>
+            Edit
+          </button>
+        </div>
       </div>
+
+      {/* Property */}
+      {property && (
+        <div style={s.card}>
+          <div style={s.cardTitle}>Property</div>
+          <div style={s.grid2}>
+            <div>
+              <div style={s.fieldLabel}>Property Name</div>
+              <div style={s.fieldValue}>
+                <Link
+                  to={`/properties/${property._id}`}
+                  style={{ color: '#4f8ef7', textDecoration: 'none', fontWeight: 600 }}
+                >
+                  {property.propertyName}
+                </Link>
+              </div>
+            </div>
+            {masterProperty && (
+              <div>
+                <div style={s.fieldLabel}>Master Property</div>
+                <div style={s.fieldValue}>
+                  <Link
+                    to={`/properties/${masterProperty._id}`}
+                    style={{ color: '#4f8ef7', textDecoration: 'none', fontWeight: 600 }}
+                  >
+                    {masterProperty.propertyName}
+                  </Link>
+                </div>
+              </div>
+            )}
+            <div>
+              <div style={s.fieldLabel}>Type</div>
+              <div style={{ ...s.fieldValue, textTransform: 'capitalize' }}>
+                {property.type}{property.unitName ? ` — Unit ${property.unitName}` : ''}
+              </div>
+            </div>
+            {(property.address || property.city) && (
+              <div>
+                <div style={s.fieldLabel}>Address</div>
+                <div style={s.fieldValue}>
+                  {[property.address, property.city, property.state, property.country]
+                    .filter(Boolean)
+                    .join(', ')}
+                </div>
+              </div>
+            )}
+            {property.contactNumber && (
+              <div>
+                <div style={s.fieldLabel}>Contact Number</div>
+                <div style={s.fieldValue}>{property.contactNumber}</div>
+              </div>
+            )}
+            <div>
+              <div style={s.fieldLabel}>Property Status</div>
+              <div style={s.fieldValue}>{property.status}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contact Details */}
       <div style={s.card}>
@@ -557,6 +690,32 @@ export default function TenantDetailPage() {
       {/* Rent Payments */}
       <div style={s.card}>
         <div style={s.cardTitle}>Rent Payments</div>
+        {/* Payment Statistics */}
+        {(() => {
+          const paid = payments.filter((p) => p.status === 'Paid');
+          const pending = payments.filter((p) => p.status === 'Pending');
+          const overdue = payments.filter((p) => p.status === 'Overdue');
+          const sumAmt = (arr: ApiRentPayment[]) => arr.reduce((s, p) => s + p.amount, 0);
+          const stats: { label: string; count: number; amount: number; color: string; bg: string }[] = [
+            { label: 'Total Payments', count: payments.length, amount: sumAmt(payments), color: '#374151', bg: '#f3f4f6' },
+            { label: 'Paid', count: paid.length, amount: sumAmt(paid), color: '#065f46', bg: '#d1fae5' },
+            { label: 'Pending', count: pending.length, amount: sumAmt(pending), color: '#713f12', bg: '#fef9c3' },
+            { label: 'Overdue', count: overdue.length, amount: sumAmt(overdue), color: '#991b1b', bg: '#fee2e2' },
+          ];
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {stats.map((st) => (
+                <div key={st.label} style={{ backgroundColor: st.bg, borderRadius: '6px', padding: '0.75rem 1rem' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 600, color: st.color, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
+                    {st.label}
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: st.color }}>{st.count}</div>
+                  <div style={{ fontSize: '0.78rem', color: st.color, opacity: 0.75, marginTop: '0.15rem' }}>{formatCurrency(st.amount)}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <table style={s.table}>
           <thead>
             <tr>
@@ -565,12 +724,13 @@ export default function TenantDetailPage() {
               <th style={s.th}>Status</th>
               <th style={s.th}>Paid Date</th>
               <th style={s.th}>Method</th>
+              <th style={s.th}>Action</th>
             </tr>
           </thead>
           <tbody>
             {payments.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ ...s.td, ...s.emptyRow }}>
+                <td colSpan={6} style={{ ...s.td, ...s.emptyRow }}>
                   No rent payments yet.
                 </td>
               </tr>
@@ -584,6 +744,29 @@ export default function TenantDetailPage() {
                   </td>
                   <td style={s.td}>{formatDate(p.paidDate)}</td>
                   <td style={{ ...s.td, color: '#6b7280' }}>{p.paymentMethod ?? '—'}</td>
+                  <td style={s.td}>
+                    {p.status !== 'Paid' && (
+                      <button
+                        type="button"
+                        disabled={markingPaidId === p._id}
+                        onClick={() => setConfirmPayTarget(p)}
+                        style={{
+                          padding: '0.25rem 0.6rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: markingPaidId === p._id ? 'not-allowed' : 'pointer',
+                          backgroundColor: '#d1fae5',
+                          color: '#065f46',
+                          opacity: markingPaidId === p._id ? 0.6 : 1,
+                          whiteSpace: 'nowrap' as const,
+                        }}
+                      >
+                        {markingPaidId === p._id ? '…' : '✓ Mark Paid'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
@@ -677,11 +860,265 @@ export default function TenantDetailPage() {
         )}
       </div>
 
-      {/* Placeholder: Cheques */}
-      <div style={s.placeholder}>
-        <p style={s.placeholderTitle}>Cheques</p>
-        <p style={s.placeholderText}>Coming in Phase 7 — post-dated cheque tracking.</p>
+      {/* Cheques */}
+      <div style={s.card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={s.cardTitle}>Cheques</div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <Link
+              to={`/cheques?tenantId=${tenant._id}`}
+              style={{ fontSize: '0.8rem', color: '#4f8ef7', textDecoration: 'none' }}
+            >
+              View all →
+            </Link>
+          </div>
+        </div>
+        {tenantCheques.length === 0 ? (
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>No cheques recorded for this tenant.</p>
+        ) : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Cheque #</th>
+                <th style={s.th}>Bank</th>
+                <th style={s.th}>Amount</th>
+                <th style={s.th}>Cheque Date</th>
+                <th style={s.th}>Deposit Date</th>
+                <th style={s.th}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenantCheques.map((c) => {
+                const statusColors: Record<TenantChequeStatus, { bg: string; color: string }> = {
+                  Pending:   { bg: '#fef9c3', color: '#713f12' },
+                  Deposited: { bg: '#dbeafe', color: '#1e40af' },
+                  Cleared:   { bg: '#d1fae5', color: '#065f46' },
+                  Bounced:   { bg: '#fee2e2', color: '#991b1b' },
+                };
+                const sc = statusColors[c.status];
+                return (
+                  <tr key={c._id}>
+                    <td style={{ ...s.td, fontWeight: 600, fontFamily: 'monospace' }}>{c.chequeNumber}</td>
+                    <td style={{ ...s.td, color: '#6b7280' }}>{c.bankName ?? '—'}</td>
+                    <td style={{ ...s.td, fontWeight: 600 }}>{formatCurrency(c.chequeAmount)}</td>
+                    <td style={s.td}>{formatDate(c.chequeDate)}</td>
+                    <td style={{ ...s.td, color: '#6b7280' }}>{formatDate(c.depositDate)}</td>
+                    <td style={s.td}>
+                      <span style={{ display: 'inline-block', padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600, backgroundColor: sc.bg, color: sc.color }}>
+                        {c.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {/* Maintenance Requests */}
+      <div style={s.card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={s.cardTitle}>Maintenance Requests</div>
+          <Link
+            to={`/maintenance?tenantId=${tenant._id}`}
+            style={{ fontSize: '0.8rem', color: '#4f8ef7', textDecoration: 'none' }}
+          >
+            View all →
+          </Link>
+        </div>
+        {tenantMaintenance.length === 0 ? (
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>No maintenance requests for this tenant.</p>
+        ) : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Title</th>
+                <th style={s.th}>Priority</th>
+                <th style={s.th}>Status</th>
+                <th style={s.th}>Cost</th>
+                <th style={s.th}>Created</th>
+                <th style={s.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenantMaintenance.map((m) => {
+                const priorityColors: Record<MaintenancePriority, { bg: string; color: string }> = {
+                  Low:       { bg: '#f3f4f6', color: '#6b7280' },
+                  Medium:    { bg: '#fef9c3', color: '#713f12' },
+                  High:      { bg: '#fff7ed', color: '#9a3412' },
+                  Emergency: { bg: '#fee2e2', color: '#991b1b' },
+                };
+                const statusColors: Record<MaintenanceStatus, { bg: string; color: string }> = {
+                  Pending:      { bg: '#fef9c3', color: '#713f12' },
+                  'In Progress':{ bg: '#dbeafe', color: '#1e40af' },
+                  Completed:    { bg: '#d1fae5', color: '#065f46' },
+                  Cancelled:    { bg: '#f3f4f6', color: '#6b7280' },
+                };
+                const pc = priorityColors[m.priority];
+                const sc = statusColors[m.status];
+                return (
+                  <tr key={m._id}>
+                    <td style={{ ...s.td, fontWeight: 600, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</td>
+                    <td style={s.td}>
+                      <span style={{ display: 'inline-block', padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600, backgroundColor: pc.bg, color: pc.color }}>
+                        {m.priority}
+                      </span>
+                    </td>
+                    <td style={s.td}>
+                      <span style={{ display: 'inline-block', padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600, backgroundColor: sc.bg, color: sc.color }}>
+                        {m.status}
+                      </span>
+                    </td>
+                    <td style={{ ...s.td, color: '#6b7280' }}>{m.cost !== undefined ? formatCurrency(m.cost) : '—'}</td>
+                    <td style={{ ...s.td, color: '#6b7280' }}>{formatDate(m.createdAt)}</td>
+                    <td style={s.td}>
+                      <Link
+                        to={`/maintenance/${m._id}`}
+                        style={{ fontSize: '0.78rem', color: '#4f8ef7', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Transactions */}
+      <div style={s.card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={s.cardTitle}>Transactions</div>
+          <Link
+            to={`/transactions?tenantId=${tenant._id}`}
+            style={{ fontSize: '0.8rem', color: '#4f8ef7', textDecoration: 'none' }}
+          >
+            View all →
+          </Link>
+        </div>
+        {tenantTransactions.length === 0 ? (
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>No transactions for this tenant.</p>
+        ) : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Date</th>
+                <th style={s.th}>Type</th>
+                <th style={s.th}>Category</th>
+                <th style={s.th}>Amount</th>
+                <th style={s.th}>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenantTransactions.map((tx) => {
+                const typeStyle: Record<TransactionType, { bg: string; color: string }> = {
+                  Income:  { bg: '#d1fae5', color: '#065f46' },
+                  Expense: { bg: '#fee2e2', color: '#991b1b' },
+                };
+                const ts = typeStyle[tx.type];
+                return (
+                  <tr key={tx._id}>
+                    <td style={{ ...s.td, color: '#6b7280' }}>{formatDate(tx.transactionDate)}</td>
+                    <td style={s.td}>
+                      <span style={{ display: 'inline-block', padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600, backgroundColor: ts.bg, color: ts.color }}>
+                        {tx.type}
+                      </span>
+                    </td>
+                    <td style={{ ...s.td, color: '#6b7280' }}>{tx.category}</td>
+                    <td style={{ ...s.td, fontWeight: 600, color: tx.type === 'Income' ? '#065f46' : '#991b1b' }}>
+                      {tx.type === 'Income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    </td>
+                    <td style={{ ...s.td, color: '#6b7280', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {tx.description ?? '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Mark as Paid confirm dialog */}
+      {confirmPayTarget && (
+        <div
+          style={s.overlay}
+          onClick={(e) =>
+            e.target === e.currentTarget && !markingPaidId && setConfirmPayTarget(null)
+          }
+        >
+          <div style={{ ...s.modal, width: '400px', padding: '1.5rem' }}>
+            <h2 style={{ ...s.modalTitle, marginBottom: '0.75rem' }}>Confirm Payment</h2>
+            <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '1rem' }}>
+              Are you sure you want to mark this payment as paid?
+            </p>
+
+            {/* Payment details summary */}
+            <div
+              style={{
+                backgroundColor: '#f9fafb',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                padding: '1rem',
+                marginBottom: '1rem',
+                fontSize: '0.875rem',
+              }}
+            >
+              {(
+                [
+                  ['Due Date', formatDate(confirmPayTarget.dueDate)],
+                  ['Amount', formatCurrency(confirmPayTarget.amount)],
+                  ['Current Status', confirmPayTarget.status],
+                ] as [string, string][]
+              ).map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.3rem 0',
+                    borderBottom: label === 'Current Status' ? 'none' : '1px solid #f3f4f6',
+                  }}
+                >
+                  <span style={{ color: '#6b7280' }}>{label}</span>
+                  <span style={{ fontWeight: 600, color: '#1f2937' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+
+            <p style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '1.25rem' }}>
+              Today's date will be recorded as the paid date. This action cannot be undone.
+            </p>
+
+            <div style={s.modalActions}>
+              <button
+                style={s.cancelBtn}
+                type="button"
+                onClick={() => setConfirmPayTarget(null)}
+                disabled={!!markingPaidId}
+              >
+                Cancel
+              </button>
+              <button
+                style={{
+                  ...s.submitBtn,
+                  backgroundColor: '#059669',
+                  ...(markingPaidId === confirmPayTarget._id ? s.submitBtnDisabled : {}),
+                }}
+                type="button"
+                onClick={() => void handleMarkPaid(confirmPayTarget._id)}
+                disabled={markingPaidId === confirmPayTarget._id}
+              >
+                {markingPaidId === confirmPayTarget._id ? 'Processing…' : 'Confirm Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit modal */}
       {editOpen && editForm && (

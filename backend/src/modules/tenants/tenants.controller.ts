@@ -4,7 +4,7 @@ import { ApiError } from '@utils/ApiError';
 import { ApiResponse } from '@utils/ApiResponse';
 import { asyncHandler } from '@utils/asyncHandler';
 import { UserRole } from '@models/user.model';
-import { Property } from '@models/property.model';
+import { Property, updatePropertyStatus } from '@models/property.model';
 import { Tenant } from '@models/tenant.model';
 import { RentPayment } from '@models/rent-payment.model';
 import {
@@ -43,7 +43,7 @@ export const tenantAccessMiddleware: RequestHandler = asyncHandler(async (req, _
   const id = req.params['id'] as string;
   validateObjectId(id, 'tenant ID');
 
-  const tenant = await Tenant.findById(id).lean();
+  const tenant = await Tenant.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
   if (!tenant) {
     throw ApiError.notFound('Tenant');
   }
@@ -72,7 +72,7 @@ export const tenantAccessMiddleware: RequestHandler = asyncHandler(async (req, _
  */
 export const getTenantsDropdown: RequestHandler = asyncHandler(async (req, res) => {
   const { role, id: userId } = req.user!;
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
   if (role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN) {
     const propertyIds = await getTenantPropertyIds(userId);
@@ -116,7 +116,7 @@ export const listTenants: RequestHandler = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
 
   const { role, id: userId } = req.user!;
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
   // BL-04: STAFF see only tenants in their own properties
   if (role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN) {
@@ -249,13 +249,14 @@ export const updateTenant: RequestHandler = asyncHandler(async (req, res) => {
 /**
  * DELETE /api/tenants/:id
  *
- * Hard-deletes the tenant. Rent payment history is preserved.
- * post-findOneAndDelete hook fires: updatePropertyStatus.
+ * Soft-deletes the tenant (isDeleted: true). Rent payment history preserved.
+ * Property status updated manually (hook won't fire on soft-delete).
  */
 export const deleteTenant: RequestHandler = asyncHandler(async (req, res) => {
   const id = req.params['id'] as string;
-  await Tenant.findByIdAndDelete(id);
-  // post-findOneAndDelete hook fires: updatePropertyStatus
+  const tenant = req.tenantDoc!;
+  await Tenant.findByIdAndUpdate(id, { $set: { isDeleted: true } });
+  await updatePropertyStatus(tenant.propertyId);
 
   return ApiResponse.noContent(res);
 });
@@ -268,7 +269,10 @@ export const deleteTenant: RequestHandler = asyncHandler(async (req, res) => {
 export const getTenantRentPayments: RequestHandler = asyncHandler(async (req, res) => {
   const id = req.params['id'] as string;
 
-  const payments = await RentPayment.find({ tenantId: new mongoose.Types.ObjectId(id) })
+  const payments = await RentPayment.find({
+    tenantId: new mongoose.Types.ObjectId(id),
+    isDeleted: { $ne: true },
+  })
     .sort({ dueDate: -1 })
     .lean();
 

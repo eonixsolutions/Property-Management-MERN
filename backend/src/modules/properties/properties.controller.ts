@@ -8,6 +8,7 @@ import { asyncHandler } from '@utils/asyncHandler';
 import { env } from '@config/env';
 import { UserRole } from '@models/user.model';
 import { Property } from '@models/property.model';
+import { Tenant } from '@models/tenant.model';
 import { createPropertySchema, updatePropertySchema } from './properties.validation';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ export const propertyOwnerMiddleware: RequestHandler = asyncHandler(async (req, 
   const id = req.params['id'] as string;
   validateObjectId(id);
 
-  const property = await Property.findById(id).lean();
+  const property = await Property.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
   if (!property) {
     throw ApiError.notFound('Property');
   }
@@ -71,7 +72,7 @@ export const listProperties: RequestHandler = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
 
   // Build filter from dataScope + query params
-  const filter: Record<string, unknown> = { ...req.dataScope };
+  const filter: Record<string, unknown> = { ...req.dataScope, isDeleted: { $ne: true } };
 
   const typeParam = req.query['type'] as string | undefined;
   if (typeParam === 'master' || typeParam === 'unit') {
@@ -88,12 +89,41 @@ export const listProperties: RequestHandler = asyncHandler(async (req, res) => {
     filter['propertyName'] = { $regex: searchParam.trim(), $options: 'i' };
   }
 
+  const parentIdParam = req.query['parentPropertyId'] as string | undefined;
+  if (parentIdParam && mongoose.isValidObjectId(parentIdParam)) {
+    filter['parentPropertyId'] = new mongoose.Types.ObjectId(parentIdParam);
+  }
+
   const [properties, total] = await Promise.all([
     Property.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Property.countDocuments(filter),
   ]);
 
-  return ApiResponse.paginated(res, properties, { total, page, limit });
+  // Attach tenant counts + unit counts in parallel batch queries
+  const propertyIds = properties.map((p) => p._id);
+  const [tenantCounts, unitCounts] = await Promise.all([
+    Tenant.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+      { $match: { propertyId: { $in: propertyIds }, status: 'Active', isDeleted: { $ne: true } } },
+      { $group: { _id: '$propertyId', count: { $sum: 1 } } },
+    ]),
+    Property.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+      {
+        $match: { parentPropertyId: { $in: propertyIds }, type: 'unit', isDeleted: { $ne: true } },
+      },
+      { $group: { _id: '$parentPropertyId', count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const tenantCountMap = new Map(tenantCounts.map((t) => [t._id.toString(), t.count]));
+  const unitCountMap = new Map(unitCounts.map((u) => [u._id.toString(), u.count]));
+
+  const propertiesWithCount = properties.map((p) => ({
+    ...p,
+    tenantCount: tenantCountMap.get(p._id.toString()) ?? 0,
+    unitCount: unitCountMap.get(p._id.toString()) ?? 0,
+  }));
+
+  return ApiResponse.paginated(res, propertiesWithCount, { total, page, limit });
 });
 
 /**
@@ -184,22 +214,12 @@ export const updateProperty: RequestHandler = asyncHandler(async (req, res) => {
 /**
  * DELETE /api/properties/:id
  *
- * Hard-deletes a property.  Ownership enforced by propertyOwnerMiddleware.
- * Also deletes all associated image files from disk.
+ * Soft-deletes a property (sets isDeleted: true).
+ * Ownership enforced by propertyOwnerMiddleware.
  */
 export const deleteProperty: RequestHandler = asyncHandler(async (req, res) => {
   const property = req.propertyDoc!;
-
-  // Remove image files from disk (best-effort, don't fail if a file is missing)
-  for (const image of property.images) {
-    const filePath = path.join(env.UPLOAD_DEST, 'properties', image.filename);
-    fs.unlink(filePath, () => {
-      // Ignore errors — file may already be gone
-    });
-  }
-
-  await Property.findByIdAndDelete(property._id);
-
+  await Property.findByIdAndUpdate(property._id, { $set: { isDeleted: true } });
   return ApiResponse.noContent(res);
 });
 
@@ -218,11 +238,11 @@ export const getPropertiesDropdown: RequestHandler = asyncHandler(async (req, re
   const scope = req.dataScope ?? {};
 
   const [masters, units] = await Promise.all([
-    Property.find({ ...scope, type: 'master' })
-      .select('_id propertyName type')
+    Property.find({ ...scope, type: 'master', isDeleted: { $ne: true } })
+      .select('_id propertyName type owner')
       .sort({ propertyName: 1 })
       .lean(),
-    Property.find({ ...scope, type: 'unit' })
+    Property.find({ ...scope, type: 'unit', isDeleted: { $ne: true } })
       .select('_id propertyName unitName type parentPropertyId')
       .sort({ unitName: 1, propertyName: 1 })
       .lean(),
@@ -252,13 +272,16 @@ export const getPropertiesDropdown: RequestHandler = asyncHandler(async (req, re
     label: string;
     type: 'master' | 'unit';
     parentPropertyId?: string;
+    ownerName?: string;
   }[] = [];
 
   for (const master of masters) {
+    const ownerName = (master.owner as { name?: string } | undefined)?.name;
     items.push({
       _id: master._id.toString(),
       label: master.propertyName,
       type: 'master',
+      ...(ownerName ? { ownerName } : {}),
     });
 
     const masterUnits = unitsByMaster.get(master._id.toString()) ?? [];
@@ -268,6 +291,7 @@ export const getPropertiesDropdown: RequestHandler = asyncHandler(async (req, re
         label: `${master.propertyName} — ${unit.unitName || unit.propertyName}`,
         type: 'unit',
         parentPropertyId: master._id.toString(),
+        ...(ownerName ? { ownerName } : {}),
       });
     }
   }

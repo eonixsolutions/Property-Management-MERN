@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import { authMiddleware } from '@middleware/auth.middleware';
 import { isAdmin, isSuperAdmin } from '@middleware/role.middleware';
-import { listUsers, createUser, updateUser, deleteUser } from './users.controller';
+import {
+  listUsers,
+  getUserStats,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser,
+} from './users.controller';
 
 const router = Router();
 
@@ -9,10 +16,24 @@ const router = Router();
 router.use(authMiddleware);
 
 /**
+ * GET /api/users/stats
+ * ADMIN & SUPER_ADMIN only. Returns total/active/suspended user counts.
+ * Registered BEFORE /:id to prevent "stats" being parsed as an ObjectId.
+ */
+router.get('/stats', isAdmin, getUserStats);
+
+/**
  * GET /api/users
- * ADMIN & SUPER_ADMIN only. Returns a paginated list of all users.
+ * ADMIN & SUPER_ADMIN only. Returns a paginated, filtered list of all users.
+ * Supports ?search, ?role, ?status query params.
  */
 router.get('/', isAdmin, listUsers);
+
+/**
+ * GET /api/users/:id
+ * ADMIN & SUPER_ADMIN only. Returns a single user with activity statistics.
+ */
+router.get('/:id', isAdmin, getUserById);
 
 /**
  * POST /api/users

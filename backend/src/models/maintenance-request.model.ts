@@ -25,6 +25,7 @@ export interface IMaintenanceRequest {
   cost?: number;
   completedDate?: Date;
   notes?: string;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +56,8 @@ const maintenanceRequestSchema = new Schema<IMaintenanceRequest>(
     cost: { type: Number, min: 0, default: undefined },
     completedDate: { type: Date, default: undefined },
     notes: { type: String, trim: true, maxlength: 5000 },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

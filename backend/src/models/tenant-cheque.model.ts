@@ -18,6 +18,7 @@ export interface ITenantCheque {
   depositDate?: Date;
   status: TenantChequeStatus;
   notes?: string;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,6 +78,8 @@ const tenantChequeSchema = new Schema<ITenantCheque>(
       index: true,
     },
     notes: { type: String, trim: true },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

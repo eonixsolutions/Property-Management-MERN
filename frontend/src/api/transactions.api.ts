@@ -53,8 +53,8 @@ export interface CreateTransactionInput {
 export type UpdateTransactionInput = Partial<Omit<CreateTransactionInput, 'propertyId' | 'tenantId'>>;
 
 /** Suggested categories for the datalist — combined for convenience */
+// Note: 'Rent' excluded — use the Rent page for rent payments
 export const INCOME_CATEGORIES = [
-  'Rent',
   'Security Deposit',
   'Late Fee',
   'Maintenance Fee',
@@ -62,6 +62,7 @@ export const INCOME_CATEGORIES = [
   'Other Income',
 ] as const;
 
+// Note: 'Owner Payment' excluded — use the Owners page for owner payments
 export const EXPENSE_CATEGORIES = [
   'Maintenance',
   'Repairs',
@@ -71,7 +72,7 @@ export const EXPENSE_CATEGORIES = [
   'Management Fee',
   'Cleaning',
   'Legal Fees',
-  'Other Expense',
+  'Others',
 ] as const;
 
 // ── API wrapper ───────────────────────────────────────────────────────────────

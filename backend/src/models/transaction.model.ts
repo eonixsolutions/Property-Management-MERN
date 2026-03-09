@@ -51,6 +51,7 @@ export interface ITransaction extends Document {
   referenceNumber?: string;
   isRecurring: boolean;
   recurringFrequency?: RecurringFrequency;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -122,6 +123,8 @@ const transactionSchema = new Schema<ITransaction>(
       enum: [...RECURRING_FREQUENCIES, null],
       default: undefined,
     },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { AxiosError } from 'axios';
 import { ownerPaymentsApi } from '@api/owner-payments.api';
+import { addOwnerPaymentSchema, editOwnerPaymentSchema } from '@validations/owner-payment.form.schema';
 import type {
   ApiOwnerPayment,
   OwnerPaymentStatus,
@@ -12,31 +12,21 @@ import type { PaginationMeta } from '@api/users.api';
 import { propertiesApi } from '@api/properties.api';
 import type { DropdownItem } from '@api/properties.api';
 import { useAuth } from '@context/AuthContext';
+import { sh } from '@/styles/shared';
+import { resolveError, zodFieldErrors } from '@utils/formHelpers';
+import type { FieldErrors } from '@utils/formHelpers';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { formatDateLong } from '@utils/formatDate';
+import { formatCurrency } from '@utils/formatCurrency';
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const s = {
-  page: { padding: '1.5rem' },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1.25rem',
-    flexWrap: 'wrap' as const,
-    gap: '0.75rem',
-  },
-  title: { fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e' },
+  ...sh,
+  // page-specific overrides / additions
+  field: { marginBottom: '0.875rem', flex: 1 },
   headerBtns: { display: 'flex', gap: '0.75rem' },
-  addBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
   generateBtn: {
     padding: '0.5rem 1rem',
     backgroundColor: '#7c3aed',
@@ -47,36 +37,12 @@ const s = {
     fontWeight: 600,
     cursor: 'pointer',
   },
-  filterBar: {
-    display: 'flex',
-    gap: '0.75rem',
-    marginBottom: '1rem',
-    flexWrap: 'wrap' as const,
-    alignItems: 'center',
-  },
-  filterSelect: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-  },
   monthInput: {
     padding: '0.45rem 0.65rem',
     border: '1px solid #d1d5db',
     borderRadius: '4px',
     fontSize: '0.875rem',
     color: '#111',
-  },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.6rem 0.75rem',
-    fontSize: '0.8rem',
-    marginBottom: '1rem',
   },
   summaryBar: { display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' as const },
   summaryCard: {
@@ -85,161 +51,6 @@ const s = {
     fontSize: '0.82rem',
     fontWeight: 600,
     minWidth: '120px',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  th: {
-    textAlign: 'left' as const,
-    padding: '0.75rem 1rem',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  td: {
-    padding: '0.75rem 1rem',
-    fontSize: '0.875rem',
-    color: '#374151',
-    borderBottom: '1px solid #f3f4f6',
-    verticalAlign: 'middle' as const,
-  },
-  actionBtn: {
-    padding: '0.25rem 0.6rem',
-    fontSize: '0.78rem',
-    borderRadius: '3px',
-    cursor: 'pointer',
-    border: '1px solid',
-    marginLeft: '0.4rem',
-  },
-  editBtn: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  deleteBtn: { backgroundColor: '#fff1f2', borderColor: '#fecdd3', color: '#be123c' },
-  badge: {
-    display: 'inline-block',
-    padding: '0.15rem 0.5rem',
-    borderRadius: '999px',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-  },
-  pagination: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    marginTop: '1rem',
-    justifyContent: 'flex-end',
-  },
-  pageBtn: {
-    padding: '0.35rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-  },
-  pageBtnDisabled: { opacity: 0.5, cursor: 'not-allowed' as const },
-  pageInfo: { fontSize: '0.8rem', color: '#6b7280' },
-  emptyRow: { textAlign: 'center' as const, color: '#9ca3af', fontSize: '0.875rem' },
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    zIndex: 50,
-    overflowY: 'auto' as const,
-    padding: '2rem 1rem',
-  },
-  modal: {
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    padding: '2rem',
-    width: '520px',
-    maxWidth: '100%',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-    margin: 'auto',
-  },
-  modalTitle: { fontSize: '1.1rem', fontWeight: 700, color: '#1a1a2e', marginBottom: '1.25rem' },
-  fieldRow: { display: 'flex', gap: '0.75rem' },
-  field: { marginBottom: '0.875rem', flex: 1 },
-  label: {
-    display: 'block',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: '0.3rem',
-  },
-  input: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-  },
-  select: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-    boxSizing: 'border-box' as const,
-  },
-  textarea: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-    minHeight: '60px',
-    resize: 'vertical' as const,
-  },
-  modalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.75rem',
-    marginTop: '1.5rem',
-  },
-  cancelBtn: {
-    padding: '0.5rem 1rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-  },
-  submitBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  submitBtnDisabled: { opacity: 0.7, cursor: 'not-allowed' as const },
-  modalError: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.5rem 0.65rem',
-    fontSize: '0.8rem',
-    marginBottom: '0.875rem',
   },
   modalSuccess: {
     backgroundColor: '#d1fae5',
@@ -264,28 +75,8 @@ function statusBadge(status: OwnerPaymentStatus): React.CSSProperties {
   return { ...s.badge, ...STATUS_STYLES[status] };
 }
 
-function formatAmount(n: number): string {
-  return `${n.toLocaleString()} QAR`;
-}
-
 function formatMonth(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-}
-
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function resolveError(err: unknown): string {
-  const e = err as AxiosError<{ error?: { code?: string; message?: string } }>;
-  const code = e.response?.data?.error?.code;
-  switch (code) {
-    case 'FORBIDDEN': return e.response?.data?.error?.message ?? 'Permission denied.';
-    case 'NOT_FOUND': return e.response?.data?.error?.message ?? 'Resource not found.';
-    case 'VALIDATION_ERROR': return e.response?.data?.error?.message ?? 'Validation failed.';
-    default: return 'An unexpected error occurred.';
-  }
 }
 
 const PAYMENT_METHODS: OwnerPaymentMethod[] = ['Cash', 'Cheque', 'Bank Transfer', 'Online', 'Other'];
@@ -350,11 +141,14 @@ export default function OwnersPage() {
 
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; payment?: ApiOwnerPayment } | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
   const [deleteTarget, setDeleteTarget] = useState<ApiOwnerPayment | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
 
   const [showGenerate, setShowGenerate] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -387,30 +181,49 @@ export default function OwnersPage() {
 
   useEffect(() => { void loadPayments(); }, [loadPayments]);
 
-  function setField(key: keyof FormState, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function handleFieldChange(key: keyof FormState, value: string) {
+    const newForm = { ...form, [key]: value };
+    setForm(newForm);
+    const schema = modal?.mode === 'add' ? addOwnerPaymentSchema : editOwnerPaymentSchema;
+    const result = schema.safeParse(newForm);
+    if (result.success) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+    } else {
+      const errs = zodFieldErrors(result.error);
+      if (errs[key as string]) {
+        setFieldErrors((prev) => ({ ...prev, [key]: errs[key as string] }));
+      } else {
+        setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+      }
+    }
   }
 
   function openAddModal() {
     setForm(emptyForm);
     setModalError('');
+    setFieldErrors({});
     setModal({ mode: 'add' });
   }
 
   function openEditModal(p: ApiOwnerPayment) {
     setForm(paymentToForm(p));
     setModalError('');
+    setFieldErrors({});
     setModal({ mode: 'edit', payment: p });
   }
 
-  function closeModal() { setModal(null); setModalError(''); }
+  function closeModal() { setModal(null); setModalError(''); setFieldErrors({}); }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.propertyId) { setModalError('Please select a property.'); return; }
-    if (!form.amount || Number(form.amount) < 0) { setModalError('Amount is required.'); return; }
-    if (!form.paymentMonth) { setModalError('Payment month is required.'); return; }
-
+    const schema = modal?.mode === 'add' ? addOwnerPaymentSchema : editOwnerPaymentSchema;
+    const result = schema.safeParse(form);
+    if (!result.success) {
+      setFieldErrors(zodFieldErrors(result.error));
+      setModalError(result.error.issues[0]?.message ?? 'Please fix the errors above.');
+      return;
+    }
+    setFieldErrors({});
     setModalError('');
     setSaving(true);
     try {
@@ -463,6 +276,21 @@ export default function OwnersPage() {
     }
   }
 
+  async function handleMarkPaid(id: string) {
+    setMarkingPaidId(id);
+    try {
+      await ownerPaymentsApi.update(id, {
+        status: 'Paid',
+        paidDate: new Date().toISOString().slice(0, 10),
+      });
+      void loadPayments();
+    } catch {
+      // silently ignore — table will retain current state
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }
+
   async function handleGenerate() {
     setGenerating(true);
     setGenerateError('');
@@ -479,6 +307,10 @@ export default function OwnersPage() {
 
   function propertyLabel(propertyId: string): string {
     return propertyOptions.find((p) => p._id === propertyId)?.label ?? '—';
+  }
+
+  function ownerName(propertyId: string): string {
+    return propertyOptions.find((p) => p._id === propertyId)?.ownerName ?? '—';
   }
 
   // Summary
@@ -521,14 +353,14 @@ export default function OwnersPage() {
       {!loading && payments.length > 0 && (
         <div style={s.summaryBar}>
           <div style={{ ...s.summaryCard, backgroundColor: '#fef9c3', color: '#713f12' }}>
-            Pending: {formatAmount(pendingTotal)}
+            Pending: {formatCurrency(pendingTotal, 'QAR', 0)}
           </div>
           <div style={{ ...s.summaryCard, backgroundColor: '#d1fae5', color: '#065f46' }}>
-            Paid: {formatAmount(paidTotal)}
+            Paid: {formatCurrency(paidTotal, 'QAR', 0)}
           </div>
           {overdueTotal > 0 && (
             <div style={{ ...s.summaryCard, backgroundColor: '#fee2e2', color: '#991b1b' }}>
-              Overdue: {formatAmount(overdueTotal)}
+              Overdue: {formatCurrency(overdueTotal, 'QAR', 0)}
             </div>
           )}
         </div>
@@ -542,11 +374,11 @@ export default function OwnersPage() {
             <thead>
               <tr>
                 <th style={s.th}>Property</th>
+                <th style={s.th}>Owner</th>
                 <th style={s.th}>Month</th>
                 <th style={s.th}>Amount</th>
                 <th style={s.th}>Status</th>
                 <th style={s.th}>Paid Date</th>
-                <th style={s.th}>Method</th>
                 <th style={s.th}>Actions</th>
               </tr>
             </thead>
@@ -557,14 +389,39 @@ export default function OwnersPage() {
                 payments.map((p) => (
                   <tr key={p._id} style={p.status === 'Overdue' ? { backgroundColor: '#fff5f5' } : {}}>
                     <td style={s.td}>{propertyLabel(p.propertyId)}</td>
+                    <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>{ownerName(p.propertyId)}</td>
                     <td style={s.td}>{formatMonth(p.paymentMonth)}</td>
-                    <td style={{ ...s.td, fontWeight: 600 }}>{formatAmount(p.amount)}</td>
+                    <td style={{ ...s.td, fontWeight: 600 }}>{formatCurrency(p.amount, 'QAR', 0)}</td>
                     <td style={s.td}><span style={statusBadge(p.status)}>{p.status}</span></td>
-                    <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>{formatDate(p.paidDate)}</td>
-                    <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>{p.paymentMethod ?? '—'}</td>
-                    <td style={s.td}>
-                      <button style={{ ...s.actionBtn, ...s.editBtn }} type="button" onClick={() => openEditModal(p)}>Edit</button>
-                      <button style={{ ...s.actionBtn, ...s.deleteBtn }} type="button" onClick={() => setDeleteTarget(p)}>Delete</button>
+                    <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>{formatDateLong(p.paidDate)}</td>
+                    <td style={{ ...s.td, whiteSpace: 'nowrap' as const }}>
+                      {p.status !== 'Paid' && (
+                        <button
+                          style={{ ...s.actionBtn, color: '#065f46' }}
+                          type="button"
+                          title="Mark as Paid"
+                          disabled={markingPaidId === p._id}
+                          onClick={() => void handleMarkPaid(p._id)}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </button>
+                      )}
+                      <button style={{ ...s.actionBtn, ...s.editBtn }} type="button" title="Edit payment" onClick={() => openEditModal(p)}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      <button style={{ ...s.actionBtn, ...s.deleteBtn }} type="button" title="Delete payment" onClick={() => setDeleteTarget(p)}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -572,13 +429,7 @@ export default function OwnersPage() {
             </tbody>
           </table>
 
-          {meta && meta.totalPages > 1 && (
-            <div style={s.pagination}>
-              <button style={{ ...s.pageBtn, ...(meta.hasPrevPage ? {} : s.pageBtnDisabled) }} type="button" disabled={!meta.hasPrevPage} onClick={() => setPage((p) => p - 1)}>← Prev</button>
-              <span style={s.pageInfo}>Page {meta.page} of {meta.totalPages} ({meta.total} total)</span>
-              <button style={{ ...s.pageBtn, ...(meta.hasNextPage ? {} : s.pageBtnDisabled) }} type="button" disabled={!meta.hasNextPage} onClick={() => setPage((p) => p + 1)}>Next →</button>
-            </div>
-          )}
+          {meta && <Pagination meta={meta} onPageChange={setPage} />}
         </>
       )}
 
@@ -591,27 +442,30 @@ export default function OwnersPage() {
             <form onSubmit={(e) => void handleSubmit(e)}>
               <div style={s.field}>
                 <label style={s.label} htmlFor="op-property">Property *</label>
-                <select id="op-property" style={s.select} value={form.propertyId} onChange={(e) => setField('propertyId', e.target.value)} disabled={saving || modal.mode === 'edit'} required>
+                <select id="op-property" style={{ ...s.select, ...(fieldErrors.propertyId ? s.inputError : {}) }} value={form.propertyId} onChange={(e) => handleFieldChange('propertyId', e.target.value)} disabled={saving || modal.mode === 'edit'}>
                   <option value="">Select property…</option>
                   {propertyOptions.map((p) => <option key={p._id} value={p._id}>{p.label}</option>)}
                 </select>
+                {fieldErrors.propertyId && <div style={s.fieldError}>{fieldErrors.propertyId}</div>}
               </div>
 
               <div style={s.fieldRow}>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="op-amount">Amount (QAR) *</label>
-                  <input id="op-amount" style={s.input} type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setField('amount', e.target.value)} disabled={saving} required />
+                  <input id="op-amount" style={{ ...s.input, ...(fieldErrors.amount ? s.inputError : {}) }} type="number" min="0" step="0.01" value={form.amount} onChange={(e) => handleFieldChange('amount', e.target.value)} disabled={saving} />
+                  {fieldErrors.amount && <div style={s.fieldError}>{fieldErrors.amount}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="op-month">Payment Month *</label>
-                  <input id="op-month" style={s.input} type="month" value={form.paymentMonth} onChange={(e) => setField('paymentMonth', e.target.value)} disabled={saving} required />
+                  <input id="op-month" style={{ ...s.input, ...(fieldErrors.paymentMonth ? s.inputError : {}) }} type="month" value={form.paymentMonth} onChange={(e) => handleFieldChange('paymentMonth', e.target.value)} disabled={saving} />
+                  {fieldErrors.paymentMonth && <div style={s.fieldError}>{fieldErrors.paymentMonth}</div>}
                 </div>
               </div>
 
               <div style={s.fieldRow}>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="op-status">Status</label>
-                  <select id="op-status" style={s.select} value={form.status} onChange={(e) => setField('status', e.target.value)} disabled={saving}>
+                  <select id="op-status" style={s.select} value={form.status} onChange={(e) => handleFieldChange('status', e.target.value)} disabled={saving}>
                     <option value="Pending">Pending</option>
                     <option value="Paid">Paid</option>
                     <option value="Overdue">Overdue</option>
@@ -619,32 +473,32 @@ export default function OwnersPage() {
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="op-paiddate">Paid Date</label>
-                  <input id="op-paiddate" style={s.input} type="date" value={form.paidDate} onChange={(e) => setField('paidDate', e.target.value)} disabled={saving} />
+                  <input id="op-paiddate" style={s.input} type="date" value={form.paidDate} onChange={(e) => handleFieldChange('paidDate', e.target.value)} disabled={saving} />
                 </div>
               </div>
 
               <div style={s.fieldRow}>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="op-method">Payment Method</label>
-                  <select id="op-method" style={s.select} value={form.paymentMethod} onChange={(e) => setField('paymentMethod', e.target.value)} disabled={saving}>
+                  <select id="op-method" style={s.select} value={form.paymentMethod} onChange={(e) => handleFieldChange('paymentMethod', e.target.value)} disabled={saving}>
                     <option value="">— None —</option>
                     {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="op-cheque">Cheque Number</label>
-                  <input id="op-cheque" style={s.input} type="text" value={form.chequeNumber} onChange={(e) => setField('chequeNumber', e.target.value)} disabled={saving} />
+                  <input id="op-cheque" style={s.input} type="text" value={form.chequeNumber} onChange={(e) => handleFieldChange('chequeNumber', e.target.value)} disabled={saving} />
                 </div>
               </div>
 
               <div style={s.field}>
                 <label style={s.label} htmlFor="op-ref">Reference Number</label>
-                <input id="op-ref" style={s.input} type="text" value={form.referenceNumber} onChange={(e) => setField('referenceNumber', e.target.value)} disabled={saving} />
+                <input id="op-ref" style={s.input} type="text" value={form.referenceNumber} onChange={(e) => handleFieldChange('referenceNumber', e.target.value)} disabled={saving} />
               </div>
 
               <div style={s.field}>
                 <label style={s.label} htmlFor="op-notes">Notes</label>
-                <textarea id="op-notes" style={s.textarea} value={form.notes} onChange={(e) => setField('notes', e.target.value)} disabled={saving} />
+                <textarea id="op-notes" style={s.textarea} value={form.notes} onChange={(e) => handleFieldChange('notes', e.target.value)} disabled={saving} />
               </div>
 
               <div style={s.modalActions}>
@@ -660,21 +514,20 @@ export default function OwnersPage() {
 
       {/* Delete confirm */}
       {deleteTarget && (
-        <div style={s.overlay} onClick={(e) => e.target === e.currentTarget && setDeleteTarget(null)}>
-          <div style={{ ...s.modal, width: '400px', padding: '1.5rem' }}>
-            <h2 style={{ ...s.modalTitle, marginBottom: '0.75rem' }}>Delete Owner Payment</h2>
-            <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '1.25rem' }}>
+        <ConfirmDialog
+          title="Delete Owner Payment"
+          message={
+            <>
               Delete the <strong>{formatMonth(deleteTarget.paymentMonth)}</strong> payment of{' '}
-              <strong>{formatAmount(deleteTarget.amount)}</strong>? This cannot be undone.
-            </p>
-            <div style={s.modalActions}>
-              <button style={s.cancelBtn} type="button" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</button>
-              <button style={{ ...s.submitBtn, backgroundColor: '#dc2626', ...(deleting ? s.submitBtnDisabled : {}) }} type="button" onClick={() => void handleDelete()} disabled={deleting}>
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+              <strong>{formatCurrency(deleteTarget.amount, 'QAR', 0)}</strong>? This cannot be undone.
+            </>
+          }
+          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          isLoading={deleting}
+          isDanger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
 
       {/* Generate payments confirm */}

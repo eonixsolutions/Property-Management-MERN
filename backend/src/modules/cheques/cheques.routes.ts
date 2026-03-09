@@ -3,11 +3,13 @@ import { authMiddleware } from '@middleware/auth.middleware';
 import {
   listTenantCheques,
   createTenantCheque,
+  updateTenantCheque,
   updateTenantChequeStatus,
   deleteTenantCheque,
   listOwnerCheques,
   createOwnerCheque,
   createOwnerChequesBulk,
+  updateOwnerCheque,
   updateOwnerChequeStatus,
   deleteOwnerCheque,
 } from './cheques.controller';
@@ -20,6 +22,7 @@ router.use(authMiddleware);
 // ── Tenant cheques ─────────────────────────────────────────────────────────
 router.get('/tenant', listTenantCheques);
 router.post('/tenant', createTenantCheque);
+router.put('/tenant/:id', updateTenantCheque);
 router.patch('/tenant/:id/status', updateTenantChequeStatus);
 router.delete('/tenant/:id', deleteTenantCheque);
 
@@ -28,6 +31,7 @@ router.delete('/tenant/:id', deleteTenantCheque);
 router.post('/owner/bulk', createOwnerChequesBulk);
 router.get('/owner', listOwnerCheques);
 router.post('/owner', createOwnerCheque);
+router.put('/owner/:id', updateOwnerCheque);
 router.patch('/owner/:id/status', updateOwnerChequeStatus);
 router.delete('/owner/:id', deleteOwnerCheque);
 

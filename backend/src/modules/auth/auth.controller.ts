@@ -5,7 +5,7 @@ import { asyncHandler } from '@utils/asyncHandler';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '@utils/jwt';
 import { User, UserRole, UserStatus } from '@models/user.model';
 import { Settings } from '@models/settings.model';
-import { env, isProd } from '@config/env';
+import { env } from '@config/env';
 import { registerSchema, loginSchema } from './auth.validation';
 
 // ── Cookie helpers ─────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ function expiryToMs(expiry: string): number {
 function getRefreshCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
-    secure: isProd,
+    secure: env.COOKIE_SECURE,
     sameSite: 'lax',
     path: '/api/auth',
     maxAge: expiryToMs(env.JWT_REFRESH_EXPIRY),
@@ -55,7 +55,7 @@ function getRefreshCookieOptions(): CookieOptions {
 function getClearCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
-    secure: isProd,
+    secure: env.COOKIE_SECURE,
     sameSite: 'lax',
     path: '/api/auth',
   };
@@ -133,6 +133,10 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
   }
 
   const userId = (user._id as { toString(): string }).toString();
+
+  // Record last login timestamp (non-blocking)
+  user.lastLogin = new Date();
+  await user.save();
 
   const accessToken = generateAccessToken({ sub: userId, role: user.role });
   const refreshToken = generateRefreshToken({ sub: userId });

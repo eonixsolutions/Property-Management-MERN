@@ -10,8 +10,10 @@ import { OwnerCheque } from '@models/owner-cheque.model';
 import {
   createTenantChequeSchema,
   updateTenantChequeStatusSchema,
+  updateTenantChequeSchema,
   createOwnerChequeSchema,
   updateOwnerChequeStatusSchema,
+  updateOwnerChequeSchema,
   createOwnerChequesBulkSchema,
 } from './cheques.validation';
 
@@ -87,6 +89,7 @@ export const listTenantCheques: RequestHandler = asyncHandler(async (req, res) =
 
   const scopedIds = await getScopedPropertyIds(role, userId);
   const filter = buildPropertyFilter(scopedIds, req.query as Record<string, unknown>);
+  filter['isDeleted'] = { $ne: true };
 
   if (req.query['search']) {
     const re = new RegExp(String(req.query['search']).trim(), 'i');
@@ -192,9 +195,9 @@ export const updateTenantChequeStatus: RequestHandler = asyncHandler(async (req,
 });
 
 /**
- * DELETE /api/cheques/tenant/:id
+ * PUT /api/cheques/tenant/:id
  */
-export const deleteTenantCheque: RequestHandler = asyncHandler(async (req, res) => {
+export const updateTenantCheque: RequestHandler = asyncHandler(async (req, res) => {
   const { id: userId, role } = req.user!;
   const id = req.params['id'] as string;
   validateObjectId(id, 'tenant cheque ID');
@@ -206,7 +209,52 @@ export const deleteTenantCheque: RequestHandler = asyncHandler(async (req, res) 
     if (cheque.userId.toString() !== userId) throw ApiError.forbidden('Access denied');
   }
 
-  await TenantCheque.findByIdAndDelete(id);
+  const parsed = updateTenantChequeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(
+      422,
+      'VALIDATION_ERROR',
+      parsed.error.errors[0]?.message ?? 'Validation failed',
+    );
+  }
+
+  const data = parsed.data;
+  const update: Record<string, unknown> = {};
+  if (data.chequeNumber !== undefined) update['chequeNumber'] = data.chequeNumber;
+  if (data.bankName !== undefined) update['bankName'] = data.bankName ?? null;
+  if (data.chequeAmount !== undefined) update['chequeAmount'] = data.chequeAmount;
+  if (data.chequeDate !== undefined) update['chequeDate'] = new Date(data.chequeDate);
+  if (data.depositDate !== undefined)
+    update['depositDate'] = data.depositDate ? new Date(data.depositDate) : null;
+  if (data.status !== undefined) update['status'] = data.status;
+  if (data.notes !== undefined) update['notes'] = data.notes ?? null;
+  if (data.rentPaymentId !== undefined) update['rentPaymentId'] = data.rentPaymentId ?? null;
+
+  const updated = await TenantCheque.findByIdAndUpdate(
+    id,
+    { $set: update },
+    { new: true, runValidators: true },
+  ).lean();
+
+  return ApiResponse.ok(res, { cheque: updated });
+});
+
+/**
+ * DELETE /api/cheques/tenant/:id
+ */
+export const deleteTenantCheque: RequestHandler = asyncHandler(async (req, res) => {
+  const { id: userId, role } = req.user!;
+  const id = req.params['id'] as string;
+  validateObjectId(id, 'tenant cheque ID');
+
+  const cheque = await TenantCheque.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
+  if (!cheque) throw ApiError.notFound('Tenant cheque');
+
+  if (role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN) {
+    if (cheque.userId.toString() !== userId) throw ApiError.forbidden('Access denied');
+  }
+
+  await TenantCheque.findByIdAndUpdate(id, { $set: { isDeleted: true } });
   return ApiResponse.ok(res, { message: 'Tenant cheque deleted' });
 });
 
@@ -223,13 +271,18 @@ export const listOwnerCheques: RequestHandler = asyncHandler(async (req, res) =>
 
   const scopedIds = await getScopedPropertyIds(role, userId);
   const filter = buildPropertyFilter(scopedIds, req.query as Record<string, unknown>);
+  filter['isDeleted'] = { $ne: true };
 
   // Upcoming: cheques due in next 7 days that are still Issued
+  // Use UTC midnight as start so today's cheques (stored at T00:00:00Z) are included
   if (req.query['upcoming'] === 'true') {
     const now = new Date();
-    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const in7Days = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     filter['status'] = 'Issued';
-    filter['chequeDate'] = { $gte: now, $lte: in7Days };
+    filter['chequeDate'] = { $gte: todayStart, $lte: in7Days };
   }
 
   if (req.query['search']) {
@@ -242,9 +295,20 @@ export const listOwnerCheques: RequestHandler = asyncHandler(async (req, res) =>
     OwnerCheque.countDocuments(filter),
   ]);
 
+  // Attach ownerName from the property's embedded owner subdoc
+  const uniquePropertyIds = [...new Set(cheques.map((c) => c.propertyId.toString()))];
+  const properties = await Property.find({ _id: { $in: uniquePropertyIds } })
+    .select('_id owner.name')
+    .lean();
+  const ownerNameMap = new Map(properties.map((p) => [p._id.toString(), p.owner?.name ?? '']));
+  const enriched = cheques.map((c) => ({
+    ...c,
+    ownerName: ownerNameMap.get(c.propertyId.toString()) ?? '',
+  }));
+
   const totalPages = Math.ceil(total / limit);
   return ApiResponse.ok(res, {
-    cheques,
+    cheques: enriched,
     meta: {
       total,
       page,
@@ -416,9 +480,9 @@ export const updateOwnerChequeStatus: RequestHandler = asyncHandler(async (req, 
 });
 
 /**
- * DELETE /api/cheques/owner/:id
+ * PUT /api/cheques/owner/:id
  */
-export const deleteOwnerCheque: RequestHandler = asyncHandler(async (req, res) => {
+export const updateOwnerCheque: RequestHandler = asyncHandler(async (req, res) => {
   const { id: userId, role } = req.user!;
   const id = req.params['id'] as string;
   validateObjectId(id, 'owner cheque ID');
@@ -430,6 +494,51 @@ export const deleteOwnerCheque: RequestHandler = asyncHandler(async (req, res) =
     if (cheque.userId.toString() !== userId) throw ApiError.forbidden('Access denied');
   }
 
-  await OwnerCheque.findByIdAndDelete(id);
+  const parsed = updateOwnerChequeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(
+      422,
+      'VALIDATION_ERROR',
+      parsed.error.errors[0]?.message ?? 'Validation failed',
+    );
+  }
+
+  const data = parsed.data;
+  const update: Record<string, unknown> = {};
+  if (data.chequeNumber !== undefined) update['chequeNumber'] = data.chequeNumber;
+  if (data.bankName !== undefined) update['bankName'] = data.bankName ?? null;
+  if (data.chequeAmount !== undefined) update['chequeAmount'] = data.chequeAmount;
+  if (data.chequeDate !== undefined) update['chequeDate'] = new Date(data.chequeDate);
+  if (data.issueDate !== undefined)
+    update['issueDate'] = data.issueDate ? new Date(data.issueDate) : null;
+  if (data.status !== undefined) update['status'] = data.status;
+  if (data.notes !== undefined) update['notes'] = data.notes ?? null;
+  if (data.ownerPaymentId !== undefined) update['ownerPaymentId'] = data.ownerPaymentId ?? null;
+
+  const updated = await OwnerCheque.findByIdAndUpdate(
+    id,
+    { $set: update },
+    { new: true, runValidators: true },
+  ).lean();
+
+  return ApiResponse.ok(res, { cheque: updated });
+});
+
+/**
+ * DELETE /api/cheques/owner/:id
+ */
+export const deleteOwnerCheque: RequestHandler = asyncHandler(async (req, res) => {
+  const { id: userId, role } = req.user!;
+  const id = req.params['id'] as string;
+  validateObjectId(id, 'owner cheque ID');
+
+  const cheque = await OwnerCheque.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
+  if (!cheque) throw ApiError.notFound('Owner cheque');
+
+  if (role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN) {
+    if (cheque.userId.toString() !== userId) throw ApiError.forbidden('Access denied');
+  }
+
+  await OwnerCheque.findByIdAndUpdate(id, { $set: { isDeleted: true } });
   return ApiResponse.ok(res, { message: 'Owner cheque deleted' });
 });

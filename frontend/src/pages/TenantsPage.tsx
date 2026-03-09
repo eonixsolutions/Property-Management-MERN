@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AxiosError } from 'axios';
 import { tenantsApi } from '@api/tenants.api';
+import { addTenantSchema, editTenantSchema } from '@validations/tenant.form.schema';
 import type {
   ApiTenant,
   TenantStatus,
@@ -11,186 +11,22 @@ import type {
 import type { PaginationMeta } from '@api/users.api';
 import { propertiesApi } from '@api/properties.api';
 import type { DropdownItem } from '@api/properties.api';
+import { sh } from '@/styles/shared';
+import { resolveError, zodFieldErrors } from '@utils/formHelpers';
+import type { FieldErrors } from '@utils/formHelpers';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { formatDateLong } from '@utils/formatDate';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = {
-  page: { padding: '1.5rem' },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1.25rem',
-  },
-  title: { fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e' },
-  addBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  filterBar: {
-    display: 'flex',
-    gap: '0.75rem',
-    marginBottom: '1rem',
-    flexWrap: 'wrap' as const,
-  },
-  filterSelect: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-  },
-  searchInput: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    minWidth: '220px',
-    color: '#111',
-  },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.6rem 0.75rem',
-    fontSize: '0.8rem',
-    marginBottom: '1rem',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  th: {
-    textAlign: 'left' as const,
-    padding: '0.75rem 1rem',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  td: {
-    padding: '0.75rem 1rem',
-    fontSize: '0.875rem',
-    color: '#374151',
-    borderBottom: '1px solid #f3f4f6',
-    verticalAlign: 'middle' as const,
-  },
-  actionBtn: {
-    padding: '0.25rem 0.6rem',
-    fontSize: '0.78rem',
-    borderRadius: '3px',
-    cursor: 'pointer',
-    border: '1px solid',
-    marginLeft: '0.4rem',
-  },
-  viewBtn: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' },
-  editBtn: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  deleteBtn: { backgroundColor: '#fff1f2', borderColor: '#fecdd3', color: '#be123c' },
-  badge: {
-    display: 'inline-block',
-    padding: '0.15rem 0.5rem',
-    borderRadius: '999px',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-  },
-  pagination: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    marginTop: '1rem',
-    justifyContent: 'flex-end',
-  },
-  pageBtn: {
-    padding: '0.35rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-  },
-  pageBtnDisabled: { opacity: 0.5, cursor: 'not-allowed' as const },
-  pageInfo: { fontSize: '0.8rem', color: '#6b7280' },
-  emptyRow: { textAlign: 'center' as const, color: '#9ca3af', fontSize: '0.875rem' },
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    zIndex: 50,
-    overflowY: 'auto' as const,
-    padding: '2rem 1rem',
-  },
-  modal: {
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    padding: '2rem',
-    width: '600px',
-    maxWidth: '100%',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-    margin: 'auto',
-  },
-  modalTitle: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    color: '#1a1a2e',
-    marginBottom: '1.25rem',
-  },
-  fieldRow: { display: 'flex', gap: '0.75rem' },
-  field: { marginBottom: '0.875rem', flex: 1 },
-  label: {
-    display: 'block',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: '0.3rem',
-  },
-  input: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-  },
-  select: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-    boxSizing: 'border-box' as const,
-  },
-  textarea: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-    minHeight: '72px',
-    resize: 'vertical' as const,
-  },
+  ...sh,
+  // Page-specific: wider modal for the tenant form
+  modal: { ...sh.modal, width: '600px' },
+  // Page-specific: form field needs flex:1 to fill fieldRow columns equally
+  field: { ...sh.field, flex: 1 },
+  // Page-specific: section dividers within the modal form
   sectionTitle: {
     fontSize: '0.78rem',
     fontWeight: 700,
@@ -201,40 +37,6 @@ const s = {
     marginTop: '1rem',
     paddingBottom: '0.35rem',
     borderBottom: '1px solid #f3f4f6',
-  },
-  modalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.75rem',
-    marginTop: '1.5rem',
-  },
-  cancelBtn: {
-    padding: '0.5rem 1rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-  },
-  submitBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  submitBtnDisabled: { opacity: 0.7, cursor: 'not-allowed' as const },
-  modalError: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.5rem 0.65rem',
-    fontSize: '0.8rem',
-    marginBottom: '0.875rem',
   },
 } as const;
 
@@ -255,30 +57,6 @@ function isExpiringSoon(leaseEnd?: string, status?: TenantStatus): boolean {
   const now = Date.now();
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
   return end > now && end - now <= thirtyDays;
-}
-
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function resolveError(err: unknown): string {
-  const e = err as AxiosError<{ error?: { code?: string; message?: string } }>;
-  const code = e.response?.data?.error?.code;
-  switch (code) {
-    case 'FORBIDDEN':
-      return e.response?.data?.error?.message ?? 'Permission denied.';
-    case 'NOT_FOUND':
-      return e.response?.data?.error?.message ?? 'Resource not found.';
-    case 'VALIDATION_ERROR':
-      return e.response?.data?.error?.message ?? 'Validation failed. Check your inputs.';
-    default:
-      return 'An unexpected error occurred. Please try again.';
-  }
 }
 
 // ── Form state ────────────────────────────────────────────────────────────────
@@ -400,6 +178,7 @@ export default function TenantsPage() {
 
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; tenant?: ApiTenant } | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -461,27 +240,36 @@ export default function TenantsPage() {
   function closeModal() {
     setModal(null);
     setModalError('');
+    setFieldErrors({});
   }
 
-  function setField(key: keyof FormState, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function handleFieldChange(key: keyof FormState, value: string) {
+    const newForm = { ...form, [key]: value };
+    setForm(newForm);
+    const schema = modal?.mode === 'add' ? addTenantSchema : editTenantSchema;
+    const result = schema.safeParse(newForm);
+    if (result.success) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+    } else {
+      const errs = zodFieldErrors(result.error);
+      if (errs[key as string]) {
+        setFieldErrors((prev) => ({ ...prev, [key]: errs[key as string] }));
+      } else {
+        setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+      }
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      setModalError('First and last name are required.');
+    const schema = modal?.mode === 'add' ? addTenantSchema : editTenantSchema;
+    const result = schema.safeParse(form);
+    if (!result.success) {
+      setFieldErrors(zodFieldErrors(result.error));
+      setModalError(result.error.issues[0]?.message ?? 'Please fix the errors above.');
       return;
     }
-    if (!form.propertyId) {
-      setModalError('Please select a property.');
-      return;
-    }
-    if (!form.monthlyRent || Number(form.monthlyRent) < 0) {
-      setModalError('Monthly rent is required and must be non-negative.');
-      return;
-    }
-
+    setFieldErrors({});
     setModalError('');
     setSaving(true);
 
@@ -579,6 +367,8 @@ export default function TenantsPage() {
               <tr>
                 <th style={s.th}>Name</th>
                 <th style={s.th}>Property</th>
+                <th style={s.th}>Phone</th>
+                <th style={s.th}>Move-in Date</th>
                 <th style={s.th}>Status</th>
                 <th style={s.th}>Lease Period</th>
                 <th style={s.th}>Monthly Rent</th>
@@ -588,7 +378,7 @@ export default function TenantsPage() {
             <tbody>
               {tenants.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ ...s.td, ...s.emptyRow }}>
+                  <td colSpan={8} style={{ ...s.td, ...s.emptyRow }}>
                     No tenants found.
                   </td>
                 </tr>
@@ -615,37 +405,58 @@ export default function TenantsPage() {
                     <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>
                       {propertyLabel(t.propertyId)}
                     </td>
+                    <td style={{ ...s.td, fontSize: '0.82rem' }}>{t.phone ?? '—'}</td>
+                    <td style={{ ...s.td, fontSize: '0.82rem' }}>{formatDateLong(t.moveInDate)}</td>
                     <td style={s.td}>
                       <span style={tenantStatusBadge(t.status)}>{t.status}</span>
                     </td>
                     <td style={{ ...s.td, fontSize: '0.82rem' }}>
                       {t.leaseStart || t.leaseEnd
-                        ? `${formatDate(t.leaseStart)} – ${formatDate(t.leaseEnd)}`
+                        ? `${formatDateLong(t.leaseStart)} – ${formatDateLong(t.leaseEnd)}`
                         : '—'}
                     </td>
                     <td style={s.td}>{t.monthlyRent.toLocaleString()} QAR</td>
-                    <td style={s.td}>
-                      <button
-                        style={{ ...s.actionBtn, ...s.viewBtn }}
-                        type="button"
-                        onClick={() => navigate(`/tenants/${t._id}`)}
-                      >
-                        View
-                      </button>
-                      <button
-                        style={{ ...s.actionBtn, ...s.editBtn }}
-                        type="button"
-                        onClick={() => openEditModal(t)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        style={{ ...s.actionBtn, ...s.deleteBtn }}
-                        type="button"
-                        onClick={() => setDeleteTarget(t)}
-                      >
-                        Delete
-                      </button>
+                    <td style={{ ...s.td, whiteSpace: 'nowrap' as const }}>
+                      <div style={{ display: 'flex', gap: '0.1rem', alignItems: 'center' }}>
+                        {/* View */}
+                        <button
+                          style={{ ...s.actionBtn, ...s.viewBtn }}
+                          type="button"
+                          title="View tenant details"
+                          onClick={() => navigate(`/tenants/${t._id}`)}
+                        >
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        </button>
+                        {/* Edit */}
+                        <button
+                          style={{ ...s.actionBtn, ...s.editBtn }}
+                          type="button"
+                          title="Edit tenant"
+                          onClick={() => openEditModal(t)}
+                        >
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                        </button>
+                        {/* Delete */}
+                        <button
+                          style={{ ...s.actionBtn, ...s.deleteBtn }}
+                          type="button"
+                          title="Delete tenant"
+                          onClick={() => setDeleteTarget(t)}
+                        >
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/>
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -653,29 +464,7 @@ export default function TenantsPage() {
             </tbody>
           </table>
 
-          {meta && meta.totalPages > 1 && (
-            <div style={s.pagination}>
-              <button
-                style={{ ...s.pageBtn, ...(meta.hasPrevPage ? {} : s.pageBtnDisabled) }}
-                type="button"
-                disabled={!meta.hasPrevPage}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                ← Prev
-              </button>
-              <span style={s.pageInfo}>
-                Page {meta.page} of {meta.totalPages} ({meta.total} total)
-              </span>
-              <button
-                style={{ ...s.pageBtn, ...(meta.hasNextPage ? {} : s.pageBtnDisabled) }}
-                type="button"
-                disabled={!meta.hasNextPage}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next →
-              </button>
-            </div>
-          )}
+          {meta && <Pagination meta={meta} onPageChange={setPage} />}
         </>
       )}
 
@@ -696,11 +485,10 @@ export default function TenantsPage() {
                 </label>
                 <select
                   id="t-property"
-                  style={s.select}
+                  style={{ ...s.select, ...(fieldErrors.propertyId ? s.inputError : {}) }}
                   value={form.propertyId}
-                  onChange={(e) => setField('propertyId', e.target.value)}
+                  onChange={(e) => handleFieldChange('propertyId', e.target.value)}
                   disabled={saving || modal.mode === 'edit'}
-                  required
                 >
                   <option value="">Select property…</option>
                   {propertyOptions.map((p) => (
@@ -709,6 +497,7 @@ export default function TenantsPage() {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.propertyId && <div style={s.fieldError}>{fieldErrors.propertyId}</div>}
               </div>
 
               <div style={s.fieldRow}>
@@ -718,13 +507,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-first"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.firstName ? s.inputError : {}) }}
                     type="text"
                     value={form.firstName}
-                    onChange={(e) => setField('firstName', e.target.value)}
+                    onChange={(e) => handleFieldChange('firstName', e.target.value)}
                     disabled={saving}
-                    required
                   />
+                  {fieldErrors.firstName && <div style={s.fieldError}>{fieldErrors.firstName}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="t-last">
@@ -732,13 +521,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-last"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.lastName ? s.inputError : {}) }}
                     type="text"
                     value={form.lastName}
-                    onChange={(e) => setField('lastName', e.target.value)}
+                    onChange={(e) => handleFieldChange('lastName', e.target.value)}
                     disabled={saving}
-                    required
                   />
+                  {fieldErrors.lastName && <div style={s.fieldError}>{fieldErrors.lastName}</div>}
                 </div>
               </div>
 
@@ -749,12 +538,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-email"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.email ? s.inputError : {}) }}
                     type="email"
                     value={form.email}
-                    onChange={(e) => setField('email', e.target.value)}
+                    onChange={(e) => handleFieldChange('email', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.email && <div style={s.fieldError}>{fieldErrors.email}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="t-phone">
@@ -762,12 +552,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-phone"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.phone ? s.inputError : {}) }}
                     type="text"
                     value={form.phone}
-                    onChange={(e) => setField('phone', e.target.value)}
+                    onChange={(e) => handleFieldChange('phone', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.phone && <div style={s.fieldError}>{fieldErrors.phone}</div>}
                 </div>
               </div>
 
@@ -778,12 +569,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-altphone"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.alternatePhone ? s.inputError : {}) }}
                     type="text"
                     value={form.alternatePhone}
-                    onChange={(e) => setField('alternatePhone', e.target.value)}
+                    onChange={(e) => handleFieldChange('alternatePhone', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.alternatePhone && <div style={s.fieldError}>{fieldErrors.alternatePhone}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="t-qid">
@@ -794,7 +586,7 @@ export default function TenantsPage() {
                     style={s.input}
                     type="text"
                     value={form.qatarId}
-                    onChange={(e) => setField('qatarId', e.target.value)}
+                    onChange={(e) => handleFieldChange('qatarId', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -811,7 +603,7 @@ export default function TenantsPage() {
                     style={s.input}
                     type="date"
                     value={form.leaseStart}
-                    onChange={(e) => setField('leaseStart', e.target.value)}
+                    onChange={(e) => handleFieldChange('leaseStart', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -821,12 +613,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-lend"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.leaseEnd ? s.inputError : {}) }}
                     type="date"
                     value={form.leaseEnd}
-                    onChange={(e) => setField('leaseEnd', e.target.value)}
+                    onChange={(e) => handleFieldChange('leaseEnd', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.leaseEnd && <div style={s.fieldError}>{fieldErrors.leaseEnd}</div>}
                 </div>
               </div>
 
@@ -840,7 +633,7 @@ export default function TenantsPage() {
                     style={s.input}
                     type="date"
                     value={form.moveInDate}
-                    onChange={(e) => setField('moveInDate', e.target.value)}
+                    onChange={(e) => handleFieldChange('moveInDate', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -853,7 +646,7 @@ export default function TenantsPage() {
                     style={s.input}
                     type="date"
                     value={form.moveOutDate}
-                    onChange={(e) => setField('moveOutDate', e.target.value)}
+                    onChange={(e) => handleFieldChange('moveOutDate', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -867,14 +660,14 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-rent"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.monthlyRent ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     value={form.monthlyRent}
-                    onChange={(e) => setField('monthlyRent', e.target.value)}
+                    onChange={(e) => handleFieldChange('monthlyRent', e.target.value)}
                     disabled={saving}
-                    required
                   />
+                  {fieldErrors.monthlyRent && <div style={s.fieldError}>{fieldErrors.monthlyRent}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="t-deposit">
@@ -886,7 +679,7 @@ export default function TenantsPage() {
                     type="number"
                     min="0"
                     value={form.securityDeposit}
-                    onChange={(e) => setField('securityDeposit', e.target.value)}
+                    onChange={(e) => handleFieldChange('securityDeposit', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -900,7 +693,7 @@ export default function TenantsPage() {
                   id="t-status"
                   style={s.select}
                   value={form.status}
-                  onChange={(e) => setField('status', e.target.value)}
+                  onChange={(e) => handleFieldChange('status', e.target.value)}
                   disabled={saving}
                 >
                   <option value="Pending">Pending</option>
@@ -917,12 +710,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-ename"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.emergencyName ? s.inputError : {}) }}
                     type="text"
                     value={form.emergencyName}
-                    onChange={(e) => setField('emergencyName', e.target.value)}
+                    onChange={(e) => handleFieldChange('emergencyName', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.emergencyName && <div style={s.fieldError}>{fieldErrors.emergencyName}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="t-ephone">
@@ -930,12 +724,13 @@ export default function TenantsPage() {
                   </label>
                   <input
                     id="t-ephone"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.emergencyPhone ? s.inputError : {}) }}
                     type="text"
                     value={form.emergencyPhone}
-                    onChange={(e) => setField('emergencyPhone', e.target.value)}
+                    onChange={(e) => handleFieldChange('emergencyPhone', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.emergencyPhone && <div style={s.fieldError}>{fieldErrors.emergencyPhone}</div>}
                 </div>
               </div>
 
@@ -947,7 +742,7 @@ export default function TenantsPage() {
                   id="t-notes"
                   style={s.textarea}
                   value={form.notes}
-                  onChange={(e) => setField('notes', e.target.value)}
+                  onChange={(e) => handleFieldChange('notes', e.target.value)}
                   disabled={saving}
                 />
               </div>
@@ -971,43 +766,23 @@ export default function TenantsPage() {
 
       {/* Delete confirm dialog */}
       {deleteTarget && (
-        <div
-          style={s.overlay}
-          onClick={(e) => e.target === e.currentTarget && setDeleteTarget(null)}
-        >
-          <div style={{ ...s.modal, width: '420px', padding: '1.5rem' }}>
-            <h2 style={{ ...s.modalTitle, marginBottom: '0.75rem' }}>Delete Tenant</h2>
-            <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '1.25rem' }}>
+        <ConfirmDialog
+          title="Delete Tenant"
+          message={
+            <>
               Are you sure you want to delete{' '}
               <strong>
                 {deleteTarget.firstName} {deleteTarget.lastName}
               </strong>
               ? Rent payment history will be preserved.
-            </p>
-            <div style={s.modalActions}>
-              <button
-                style={s.cancelBtn}
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                style={{
-                  ...s.submitBtn,
-                  backgroundColor: '#dc2626',
-                  ...(deleting ? s.submitBtnDisabled : {}),
-                }}
-                type="button"
-                onClick={() => void handleDelete()}
-                disabled={deleting}
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          confirmLabel="Delete"
+          isLoading={deleting}
+          isDanger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </div>
   );

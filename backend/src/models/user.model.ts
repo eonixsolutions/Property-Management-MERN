@@ -32,6 +32,8 @@ export interface IUser {
   role: UserRole;
   status: UserStatus;
   phone?: string;
+  lastLogin?: Date;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,6 +112,13 @@ const userSchema = new mongoose.Schema<IUser, UserModel, IUserMethods>(
       trim: true,
       default: undefined,
     },
+
+    lastLogin: {
+      type: Date,
+      default: undefined,
+    },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
@@ -120,15 +129,9 @@ const userSchema = new mongoose.Schema<IUser, UserModel, IUserMethods>(
 
 // ── Virtuals ─────────────────────────────────────────────
 
-//enable virtuals in toJSON and toObject output (e.g. when returning API responses or doing .lean())
-userSchema.set('toJSON', { virtuals: true });
-userSchema.set('toObject', { virtuals: true });
-
 // Virtual for full name (not stored in DB, but useful for API responses)
 userSchema.virtual('fullName').get(function () {
-  return [this.firstName, this.lastName]
-    .filter(Boolean)
-    .join(' ');
+  return [this.firstName, this.lastName].filter(Boolean).join(' ');
 });
 
 // ── Instance methods ────────────────────────────────────────────────────────
@@ -148,19 +151,24 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-// ── toJSON transform: strip sensitive fields ────────────────────────────────
+// ── toJSON / toObject: include virtuals (id, fullName) + strip password ─────
+//
+// IMPORTANT: each schema.set('toJSON', ...) call REPLACES the previous value.
+// Both options MUST be combined in a single call, otherwise the second call
+// silently discards virtuals: true set by the first, causing `id` and
+// `fullName` to be absent from serialized documents.
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 userSchema.set('toJSON', {
-  // `any` is intentional: Mongoose 8's toJSON transform types `ret` as the
-  // exact document shape, which doesn't have an index signature. We only
-  // need to delete a known key, so `any` here is safe and well-established.
-  /* eslint-disable @typescript-eslint/no-explicit-any */
+  virtuals: true,
   transform(_doc: any, ret: any) {
     delete ret.password;
     return ret;
   },
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 });
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+userSchema.set('toObject', { virtuals: true });
 
 // ── Model ──────────────────────────────────────────────────────────────────
 

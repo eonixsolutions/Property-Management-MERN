@@ -48,7 +48,7 @@ export const ownerPaymentAccessMiddleware: RequestHandler = asyncHandler(
     const id = req.params['id'] as string;
     validateObjectId(id, 'owner payment ID');
 
-    const payment = await OwnerPayment.findById(id).lean();
+    const payment = await OwnerPayment.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
     if (!payment) {
       throw ApiError.notFound('Owner payment');
     }
@@ -81,7 +81,7 @@ export const listOwnerPayments: RequestHandler = asyncHandler(async (req, res) =
   const limit = Math.min(100, Math.max(1, Number(req.query['limit'] ?? 25)));
   const skip = (page - 1) * limit;
 
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
   // BL-04 scoping
   const scopedIds = await getScopedPropertyIds(role, userId);
@@ -133,7 +133,7 @@ export const listOwnerPayments: RequestHandler = asyncHandler(async (req, res) =
 export const getOwnerPaymentsDropdown: RequestHandler = asyncHandler(async (req, res) => {
   const { role, id: userId } = req.user!;
 
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
   const scopedIds = await getScopedPropertyIds(role, userId);
   if (scopedIds !== undefined) {
@@ -225,6 +225,10 @@ export const updateOwnerPayment: RequestHandler = asyncHandler(async (req, res) 
   if (data.paymentMonth !== undefined)
     update['paymentMonth'] = toMonthStart(new Date(data.paymentMonth));
   if (data.status !== undefined) update['status'] = data.status;
+  // Auto-set paidDate when marking as Paid and no explicit date provided
+  if (data.status === 'Paid' && data.paidDate === undefined) {
+    update['paidDate'] = new Date();
+  }
   if (data.paidDate !== undefined)
     update['paidDate'] = data.paidDate ? new Date(data.paidDate) : null;
   if (data.paymentMethod !== undefined) update['paymentMethod'] = data.paymentMethod ?? null;
@@ -245,7 +249,7 @@ export const updateOwnerPayment: RequestHandler = asyncHandler(async (req, res) 
  * DELETE /api/owner-payments/:id
  */
 export const deleteOwnerPayment: RequestHandler = asyncHandler(async (req, res) => {
-  await OwnerPayment.findByIdAndDelete(req.ownerPaymentDoc!._id);
+  await OwnerPayment.findByIdAndUpdate(req.ownerPaymentDoc!._id, { $set: { isDeleted: true } });
   return ApiResponse.ok(res, { message: 'Owner payment deleted' });
 });
 

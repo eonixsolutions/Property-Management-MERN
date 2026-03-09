@@ -25,6 +25,7 @@ export interface IDocument {
   originalName: string; // original filename (for display/download header)
   fileSize: number; // bytes
   mimeType: string; // e.g. 'application/pdf'
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +48,8 @@ const documentSchema = new Schema<IDocument>(
     originalName: { type: String, required: true },
     fileSize: { type: Number, required: true },
     mimeType: { type: String, required: true },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   { timestamps: true, versionKey: false },
 );

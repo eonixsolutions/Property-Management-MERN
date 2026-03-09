@@ -92,8 +92,14 @@ export const getNotifications: RequestHandler = asyncHandler(async (req, res) =>
 
   // ── Build scoping filter ────────────────────────────────────────────────────
   const scopedIds = await getScopedPropertyIds(role, userId);
-  const propertyFilter = scopedIds !== undefined ? { propertyId: { $in: scopedIds } } : {};
-  const tenantPropertyFilter = scopedIds !== undefined ? { propertyId: { $in: scopedIds } } : {};
+  const propertyFilter =
+    scopedIds !== undefined
+      ? { propertyId: { $in: scopedIds }, isDeleted: { $ne: true } }
+      : { isDeleted: { $ne: true } };
+  const tenantPropertyFilter =
+    scopedIds !== undefined
+      ? { propertyId: { $in: scopedIds }, isDeleted: { $ne: true } }
+      : { isDeleted: { $ne: true } };
 
   const now = new Date();
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);

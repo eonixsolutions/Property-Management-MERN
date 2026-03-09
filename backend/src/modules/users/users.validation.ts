@@ -33,6 +33,8 @@ export const createUserSchema = z.object({
 
   role: z.nativeEnum(UserRole).optional(),
 
+  status: z.nativeEnum(UserStatus).optional(),
+
   phone: z
     .string()
     .trim()
@@ -47,11 +49,11 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 const updateUserBase = z.object({
   firstName: z
-  .string()
-  .trim()
-  .min(1, 'First name cannot be empty')
-  .max(100, 'First name is too long')
-  .optional(),
+    .string()
+    .trim()
+    .min(1, 'First name cannot be empty')
+    .max(100, 'First name is too long')
+    .optional(),
 
   lastName: z
     .string()

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AxiosError } from 'axios';
 import { propertiesApi } from '@api/properties.api';
+import { propertySchema } from '@validations/property.form.schema';
 import type {
   ApiProperty,
   CreatePropertyInput,
@@ -12,186 +12,19 @@ import type {
 } from '@api/properties.api';
 import type { PaginationMeta } from '@api/users.api';
 import { PROPERTY_TYPES } from '@api/properties.api';
+import { sh } from '@/styles/shared';
+import { resolveError, zodFieldErrors } from '@utils/formHelpers';
+import type { FieldErrors } from '@utils/formHelpers';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = {
-  page: { padding: '1.5rem' },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1.25rem',
-  },
-  title: { fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e' },
-  addBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  filterBar: {
-    display: 'flex',
-    gap: '0.75rem',
-    marginBottom: '1rem',
-    flexWrap: 'wrap' as const,
-  },
-  filterSelect: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-  },
-  searchInput: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    minWidth: '220px',
-    color: '#111',
-  },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.6rem 0.75rem',
-    fontSize: '0.8rem',
-    marginBottom: '1rem',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  th: {
-    textAlign: 'left' as const,
-    padding: '0.75rem 1rem',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  td: {
-    padding: '0.75rem 1rem',
-    fontSize: '0.875rem',
-    color: '#374151',
-    borderBottom: '1px solid #f3f4f6',
-    verticalAlign: 'middle' as const,
-  },
-  actionBtn: {
-    padding: '0.25rem 0.6rem',
-    fontSize: '0.78rem',
-    borderRadius: '3px',
-    cursor: 'pointer',
-    border: '1px solid',
-    marginLeft: '0.4rem',
-  },
-  viewBtn: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' },
-  editBtn: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  badge: {
-    display: 'inline-block',
-    padding: '0.15rem 0.5rem',
-    borderRadius: '999px',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-  },
-  pagination: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    marginTop: '1rem',
-    justifyContent: 'flex-end',
-  },
-  pageBtn: {
-    padding: '0.35rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-  },
-  pageBtnDisabled: { opacity: 0.5, cursor: 'not-allowed' as const },
-  pageInfo: { fontSize: '0.8rem', color: '#6b7280' },
-  emptyRow: { textAlign: 'center' as const, color: '#9ca3af', fontSize: '0.875rem' },
-  // Modal
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    zIndex: 50,
-    overflowY: 'auto' as const,
-    padding: '2rem 1rem',
-  },
-  modal: {
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    padding: '2rem',
-    width: '560px',
-    maxWidth: '100%',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-    margin: 'auto',
-  },
-  modalTitle: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    color: '#1a1a2e',
-    marginBottom: '1.25rem',
-  },
-  fieldRow: { display: 'flex', gap: '0.75rem' },
-  field: { marginBottom: '0.875rem', flex: 1 },
-  label: {
-    display: 'block',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: '0.3rem',
-  },
-  input: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-  },
-  select: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-    boxSizing: 'border-box' as const,
-  },
-  textarea: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-    minHeight: '72px',
-    resize: 'vertical' as const,
-  },
+  ...sh,
+  // Page-specific: purple "+ Unit" button colour
+  unitBtn: { color: '#6d28d9' },
+  // Page-specific: form section divider label
   sectionTitle: {
     fontSize: '0.78rem',
     fontWeight: 700,
@@ -203,41 +36,7 @@ const s = {
     paddingBottom: '0.35rem',
     borderBottom: '1px solid #f3f4f6',
   },
-  modalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.75rem',
-    marginTop: '1.5rem',
-  },
-  cancelBtn: {
-    padding: '0.5rem 1rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-  },
-  submitBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  submitBtnDisabled: { opacity: 0.7, cursor: 'not-allowed' as const },
-  modalError: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.5rem 0.65rem',
-    fontSize: '0.8rem',
-    marginBottom: '0.875rem',
-  },
-} as const;
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -259,25 +58,6 @@ function statusBadge(status: PropertyStatus): React.CSSProperties {
   return { ...s.badge, ...map[status] };
 }
 
-function resolveError(err: unknown): string {
-  const e = err as AxiosError<{ error?: { code?: string; message?: string } }>;
-  const code = e.response?.data?.error?.code;
-  switch (code) {
-    case 'DUPLICATE':
-      return 'A property with this name already exists.';
-    case 'FORBIDDEN':
-      return e.response?.data?.error?.message ?? 'Permission denied.';
-    case 'NOT_FOUND':
-      return e.response?.data?.error?.message ?? 'Property not found.';
-    case 'CONFLICT':
-      return e.response?.data?.error?.message ?? 'Action not allowed.';
-    case 'VALIDATION_ERROR':
-      return e.response?.data?.error?.message ?? 'Validation failed. Check your inputs.';
-    default:
-      return 'An unexpected error occurred. Please try again.';
-  }
-}
-
 // ── Form state shape ──────────────────────────────────────────────────────────
 
 interface FormState {
@@ -296,6 +76,7 @@ interface FormState {
   bathrooms: string;
   squareFeet: string;
   purchasePrice: string;
+  purchaseDate: string;
   currentValue: string;
   defaultRent: string;
   contactNumber: string;
@@ -306,6 +87,7 @@ interface FormState {
   ownerEmail: string;
   ownerPhone: string;
   ownerMonthlyRent: string;
+  ownerRentStartDate: string;
 }
 
 const emptyForm: FormState = {
@@ -324,6 +106,7 @@ const emptyForm: FormState = {
   bathrooms: '',
   squareFeet: '',
   purchasePrice: '',
+  purchaseDate: '',
   currentValue: '',
   defaultRent: '',
   contactNumber: '',
@@ -333,6 +116,7 @@ const emptyForm: FormState = {
   ownerEmail: '',
   ownerPhone: '',
   ownerMonthlyRent: '',
+  ownerRentStartDate: '',
 };
 
 function propertyToForm(p: ApiProperty): FormState {
@@ -352,6 +136,7 @@ function propertyToForm(p: ApiProperty): FormState {
     bathrooms: p.bathrooms !== undefined ? String(p.bathrooms) : '',
     squareFeet: p.squareFeet !== undefined ? String(p.squareFeet) : '',
     purchasePrice: p.purchasePrice !== undefined ? String(p.purchasePrice) : '',
+    purchaseDate: p.purchaseDate ? p.purchaseDate.slice(0, 10) : '',
     currentValue: p.currentValue !== undefined ? String(p.currentValue) : '',
     defaultRent: p.defaultRent !== undefined ? String(p.defaultRent) : '',
     contactNumber: p.contactNumber ?? '',
@@ -362,6 +147,7 @@ function propertyToForm(p: ApiProperty): FormState {
     ownerPhone: p.owner?.phone ?? '',
     ownerMonthlyRent:
       p.owner?.monthlyRentAmount !== undefined ? String(p.owner.monthlyRentAmount) : '',
+    ownerRentStartDate: p.owner?.rentStartDate ? p.owner.rentStartDate.slice(0, 10) : '',
   };
 }
 
@@ -384,6 +170,7 @@ function formToPayload(f: FormState): CreatePropertyInput {
     bathrooms: numericOpt(f.bathrooms),
     squareFeet: numericOpt(f.squareFeet),
     purchasePrice: numericOpt(f.purchasePrice),
+    purchaseDate: f.purchaseDate.trim() ? new Date(f.purchaseDate).toISOString() : undefined,
     currentValue: numericOpt(f.currentValue),
     defaultRent: numericOpt(f.defaultRent),
     contactNumber: strOpt(f.contactNumber),
@@ -394,6 +181,9 @@ function formToPayload(f: FormState): CreatePropertyInput {
       email: strOpt(f.ownerEmail),
       phone: strOpt(f.ownerPhone),
       monthlyRentAmount: numericOpt(f.ownerMonthlyRent),
+      rentStartDate: f.ownerRentStartDate.trim()
+        ? new Date(f.ownerRentStartDate).toISOString()
+        : undefined,
     },
   };
 }
@@ -418,13 +208,22 @@ export default function PropertiesPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal state
-  const [modal, setModal] = useState<{ mode: 'add' | 'edit'; property?: ApiProperty } | null>(
-    null,
-  );
+  const [modal, setModal] = useState<{
+    mode: 'add' | 'edit';
+    property?: ApiProperty;
+    lockedParentId?: string;
+    lockedParentName?: string;
+  } | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [masterOptions, setMasterOptions] = useState<DropdownItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [unitsSumValue, setUnitsSumValue] = useState<number | null>(null);
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<ApiProperty | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Debounce search ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -468,6 +267,7 @@ export default function PropertiesPage() {
   async function openAddModal() {
     setForm(emptyForm);
     setModalError('');
+    setUnitsSumValue(null);
     // Load master properties for the unit parent select
     try {
       const items = await propertiesApi.dropdown();
@@ -480,7 +280,40 @@ export default function PropertiesPage() {
 
   // ── Open edit modal ──────────────────────────────────────────────────────
   async function openEditModal(p: ApiProperty) {
-    setForm(propertyToForm(p));
+    setModalError('');
+    setUnitsSumValue(null);
+    try {
+      const items = await propertiesApi.dropdown();
+      setMasterOptions(items.filter((i) => i.type === 'master'));
+    } catch {
+      setMasterOptions([]);
+    }
+
+    // For master properties: fetch child units and sum their currentValue
+    if (p.type === 'master') {
+      try {
+        const { properties: units } = await propertiesApi.list({ parentPropertyId: p._id, limit: 100 });
+        const sum = units.reduce((acc, u) => acc + (u.currentValue ?? 0), 0);
+        if (sum > 0) {
+          setUnitsSumValue(sum);
+          setForm({ ...propertyToForm(p), currentValue: String(sum) });
+        } else {
+          setForm(propertyToForm(p));
+        }
+      } catch {
+        setForm(propertyToForm(p));
+      }
+    } else {
+      setForm(propertyToForm(p));
+    }
+
+    setModal({ mode: 'edit', property: p });
+  }
+
+  // ── Open +Unit modal (pre-filled parent, locked) ─────────────────────────
+  async function openAddUnitModal(parentId: string) {
+    const master = properties.find((p) => p._id === parentId);
+    setForm({ ...emptyForm, type: 'unit', parentPropertyId: parentId });
     setModalError('');
     try {
       const items = await propertiesApi.dropdown();
@@ -488,32 +321,58 @@ export default function PropertiesPage() {
     } catch {
       setMasterOptions([]);
     }
-    setModal({ mode: 'edit', property: p });
+    setModal({ mode: 'add', lockedParentId: parentId, lockedParentName: master?.propertyName });
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await propertiesApi.remove(deleteTarget._id);
+      setDeleteTarget(null);
+      void loadProperties();
+    } catch {
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   // ── Close modal ──────────────────────────────────────────────────────────
   function closeModal() {
     setModal(null);
     setModalError('');
+    setFieldErrors({});
   }
 
-  // ── Form field change ────────────────────────────────────────────────────
-  function setField(key: keyof FormState, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  // ── Form field change + real-time validation ─────────────────────────────
+  function handleFieldChange(key: keyof FormState, value: string | boolean) {
+    const newForm = { ...form, [key]: value };
+    setForm(newForm);
+    const result = propertySchema.safeParse(newForm);
+    if (result.success) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+    } else {
+      const errs = zodFieldErrors(result.error);
+      if (errs[key as string]) {
+        setFieldErrors((prev) => ({ ...prev, [key]: errs[key as string] }));
+      } else {
+        setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+      }
+    }
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.propertyName.trim()) {
-      setModalError('Property name is required.');
+    const result = propertySchema.safeParse(form);
+    if (!result.success) {
+      setFieldErrors(zodFieldErrors(result.error));
+      setModalError(result.error.issues[0]?.message ?? 'Please fix the errors above.');
       return;
     }
-    if (form.type === 'unit' && !form.parentPropertyId) {
-      setModalError('Please select a parent property for this unit.');
-      return;
-    }
-
+    setFieldErrors({});
     setModalError('');
     setSaving(true);
 
@@ -600,88 +459,176 @@ export default function PropertiesPage() {
           <table style={s.table}>
             <thead>
               <tr>
-                <th style={s.th}>Property Name</th>
+                <th style={{ ...s.th, paddingLeft: '1.5rem' }}>Property Name</th>
                 <th style={s.th}>Type</th>
-                <th style={s.th}>Property Type</th>
                 <th style={s.th}>Status</th>
-                <th style={s.th}>City</th>
+                <th style={s.th}>Address</th>
+                <th style={s.th}>Tenants</th>
+                <th style={s.th}>Monthly Rent</th>
+                <th style={s.th}>Current Value</th>
                 <th style={s.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {properties.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ ...s.td, ...s.emptyRow }}>
+                  <td colSpan={8} style={{ ...s.td, ...s.emptyRow }}>
                     No properties found.
                   </td>
                 </tr>
               ) : (
-                properties.map((p) => (
-                  <tr key={p._id}>
-                    <td style={s.td}>
-                      <span style={{ fontWeight: 500 }}>{p.propertyName}</span>
-                      {p.unitName && (
-                        <span style={{ color: '#9ca3af', fontSize: '0.8rem', marginLeft: '0.4rem' }}>
-                          ({p.unitName})
-                        </span>
-                      )}
-                    </td>
-                    <td style={s.td}>
-                      <span style={typeBadge(p.type)}>
-                        {p.type === 'master' ? 'Master' : 'Unit'}
-                      </span>
-                    </td>
-                    <td style={s.td}>{p.propertyType ?? '—'}</td>
-                    <td style={s.td}>
-                      <span style={statusBadge(p.status)}>{p.status}</span>
-                    </td>
-                    <td style={s.td}>{p.city ?? '—'}</td>
-                    <td style={s.td}>
-                      <button
-                        style={{ ...s.actionBtn, ...s.viewBtn }}
-                        type="button"
-                        onClick={() => navigate(`/properties/${p._id}`)}
+                (() => {
+                  // Group: masters first, then their units immediately after
+                  const masters = properties.filter((p) => p.type === 'master');
+                  const unitsByParent = new Map<string, ApiProperty[]>();
+                  properties
+                    .filter((p) => p.type === 'unit')
+                    .forEach((u) => {
+                      const pid = u.parentPropertyId ?? '__none__';
+                      if (!unitsByParent.has(pid)) unitsByParent.set(pid, []);
+                      unitsByParent.get(pid)!.push(u);
+                    });
+                  // Orphan units (parent not on this page)
+                  const orphanUnits = properties.filter(
+                    (p) => p.type === 'unit' && !masters.find((m) => m._id === p.parentPropertyId),
+                  );
+
+                  const rows: ApiProperty[] = [];
+                  masters.forEach((m) => {
+                    rows.push(m);
+                    (unitsByParent.get(m._id) ?? []).forEach((u) => rows.push(u));
+                  });
+                  orphanUnits.forEach((u) => rows.push(u));
+
+                  return rows.map((p) => {
+                    const isUnit = p.type === 'unit';
+                    const address = [p.address, p.city].filter(Boolean).join(', ') || '—';
+                    return (
+                      <tr
+                        key={p._id}
+                        style={isUnit ? { backgroundColor: '#fafafa' } : undefined}
                       >
-                        View
-                      </button>
-                      <button
-                        style={{ ...s.actionBtn, ...s.editBtn }}
-                        type="button"
-                        onClick={() => void openEditModal(p)}
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        <td style={{ ...s.td, paddingLeft: isUnit ? '2.75rem' : '1.5rem' }}>
+                          {isUnit && (
+                            <span style={{ color: '#d1d5db', marginRight: '0.4rem', fontSize: '0.9rem' }}>
+                              ↳
+                            </span>
+                          )}
+                          <span style={{ fontWeight: isUnit ? 400 : 600 }}>{p.propertyName}</span>
+                          {p.unitName && (
+                            <span style={{ color: '#9ca3af', fontSize: '0.8rem', marginLeft: '0.35rem' }}>
+                              ({p.unitName})
+                            </span>
+                          )}
+                          {p.propertyType && (
+                            <span style={{ color: '#6b7280', fontSize: '0.75rem', display: 'block' }}>
+                              {p.propertyType}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ ...s.td, textAlign: 'center' as const }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
+                            <span style={typeBadge(p.type)}>
+                              {p.type === 'master' ? 'Master' : 'Unit'}
+                            </span>
+                            {p.type === 'master' && (
+                              <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                                {p.unitCount ?? 0} unit{(p.unitCount ?? 0) !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={s.td}>
+                          <span style={statusBadge(p.status)}>{p.status}</span>
+                        </td>
+                        <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>{address}</td>
+                        <td style={{ ...s.td, textAlign: 'center' as const }}>
+                          {(p.tenantCount ?? 0) > 0 ? (
+                            <span
+                              style={{
+                                ...s.badge,
+                                backgroundColor: '#dbeafe',
+                                color: '#1e40af',
+                              }}
+                            >
+                              {p.tenantCount}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#d1d5db' }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ ...s.td, fontSize: '0.82rem' }}>
+                          {p.defaultRent !== undefined
+                            ? `${p.defaultRent.toLocaleString()} QAR`
+                            : '—'}
+                        </td>
+                        <td style={{ ...s.td, fontSize: '0.82rem' }}>
+                          {p.currentValue !== undefined
+                            ? `${p.currentValue.toLocaleString()} QAR`
+                            : '—'}
+                        </td>
+                        <td style={s.td}>
+                          <div style={{ display: 'flex', flexDirection: 'row', gap: '0.1rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                            <button
+                              style={{ ...s.actionBtn, ...s.viewBtn }}
+                              type="button"
+                              title="View property"
+                              onClick={() => navigate(`/properties/${p._id}`)}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            </button>
+                            <button
+                              style={{ ...s.actionBtn, ...s.editBtn }}
+                              type="button"
+                              title="Edit property"
+                              onClick={() => void openEditModal(p)}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              </svg>
+                            </button>
+                            {p.type === 'master' && (
+                              <button
+                                style={{ ...s.actionBtn, ...s.unitBtn }}
+                                type="button"
+                                title="Add unit under this property"
+                                onClick={() => void openAddUnitModal(p._id)}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="12" y1="5" x2="12" y2="19"/>
+                                  <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                              </button>
+                            )}
+                            <button
+                              style={{ ...s.actionBtn, ...s.deleteBtn }}
+                              type="button"
+                              title="Delete property"
+                              onClick={() => setDeleteTarget(p)}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-1 14H6L5 6"/>
+                                <path d="M10 11v6M14 11v6"/>
+                                <path d="M9 6V4h6v2"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()
               )}
             </tbody>
           </table>
 
           {/* Pagination */}
-          {meta && meta.totalPages > 1 && (
-            <div style={s.pagination}>
-              <button
-                style={{ ...s.pageBtn, ...(meta.hasPrevPage ? {} : s.pageBtnDisabled) }}
-                type="button"
-                disabled={!meta.hasPrevPage}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                ← Prev
-              </button>
-              <span style={s.pageInfo}>
-                Page {meta.page} of {meta.totalPages} ({meta.total} total)
-              </span>
-              <button
-                style={{ ...s.pageBtn, ...(meta.hasNextPage ? {} : s.pageBtnDisabled) }}
-                type="button"
-                disabled={!meta.hasNextPage}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next →
-              </button>
-            </div>
-          )}
+          {meta && <Pagination meta={meta} onPageChange={setPage} />}
         </>
       )}
 
@@ -702,16 +649,22 @@ export default function PropertiesPage() {
                   <label style={s.label} htmlFor="p-type">
                     Type *
                   </label>
-                  <select
-                    id="p-type"
-                    style={s.select}
-                    value={form.type}
-                    onChange={(e) => setField('type', e.target.value)}
-                    disabled={saving}
-                  >
-                    <option value="master">Master Property</option>
-                    <option value="unit">Unit (under a master)</option>
-                  </select>
+                  {modal.lockedParentId ? (
+                    <div style={{ ...s.input, color: '#6b7280', backgroundColor: '#f9fafb', cursor: 'not-allowed' }}>
+                      Unit (under a master)
+                    </div>
+                  ) : (
+                    <select
+                      id="p-type"
+                      style={s.select}
+                      value={form.type}
+                      onChange={(e) => handleFieldChange('type', e.target.value)}
+                      disabled={saving}
+                    >
+                      <option value="master">Master Property</option>
+                      <option value="unit">Unit (under a master)</option>
+                    </select>
+                  )}
                 </div>
               )}
 
@@ -721,20 +674,27 @@ export default function PropertiesPage() {
                   <label style={s.label} htmlFor="p-parent">
                     Parent Property *
                   </label>
-                  <select
-                    id="p-parent"
-                    style={s.select}
-                    value={form.parentPropertyId}
-                    onChange={(e) => setField('parentPropertyId', e.target.value)}
-                    disabled={saving}
-                  >
-                    <option value="">Select master property…</option>
-                    {masterOptions.map((m) => (
-                      <option key={m._id} value={m._id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                  {modal.lockedParentId ? (
+                    <div style={{ ...s.input, color: '#6b7280', backgroundColor: '#f9fafb', cursor: 'not-allowed' }}>
+                      {modal.lockedParentName ?? modal.lockedParentId}
+                    </div>
+                  ) : (
+                    <select
+                      id="p-parent"
+                      style={{ ...s.select, ...(fieldErrors.parentPropertyId ? s.inputError : {}) }}
+                      value={form.parentPropertyId}
+                      onChange={(e) => handleFieldChange('parentPropertyId', e.target.value)}
+                      disabled={saving}
+                    >
+                      <option value="">Select master property…</option>
+                      {masterOptions.map((m) => (
+                        <option key={m._id} value={m._id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {fieldErrors.parentPropertyId && <div style={s.fieldError}>{fieldErrors.parentPropertyId}</div>}
                 </div>
               )}
 
@@ -750,7 +710,7 @@ export default function PropertiesPage() {
                     type="text"
                     placeholder="e.g. Unit 101"
                     value={form.unitName}
-                    onChange={(e) => setField('unitName', e.target.value)}
+                    onChange={(e) => handleFieldChange('unitName', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -763,14 +723,14 @@ export default function PropertiesPage() {
                 </label>
                 <input
                   id="p-name"
-                  style={s.input}
+                  style={{ ...s.input, ...(fieldErrors.propertyName ? s.inputError : {}) }}
                   type="text"
                   placeholder="e.g. Tower A"
                   value={form.propertyName}
-                  onChange={(e) => setField('propertyName', e.target.value)}
+                  onChange={(e) => handleFieldChange('propertyName', e.target.value)}
                   disabled={saving}
-                  required
                 />
+                {fieldErrors.propertyName && <div style={s.fieldError}>{fieldErrors.propertyName}</div>}
               </div>
 
               <div style={s.fieldRow}>
@@ -783,7 +743,7 @@ export default function PropertiesPage() {
                     id="p-type2"
                     style={s.select}
                     value={form.propertyType}
-                    onChange={(e) => setField('propertyType', e.target.value)}
+                    onChange={(e) => handleFieldChange('propertyType', e.target.value)}
                     disabled={saving}
                   >
                     <option value="">Select type…</option>
@@ -804,7 +764,7 @@ export default function PropertiesPage() {
                     id="p-status"
                     style={s.select}
                     value={form.status}
-                    onChange={(e) => setField('status', e.target.value)}
+                    onChange={(e) => handleFieldChange('status', e.target.value)}
                     disabled={saving}
                   >
                     <option value="Vacant">Vacant</option>
@@ -822,12 +782,13 @@ export default function PropertiesPage() {
                 </label>
                 <input
                   id="p-address"
-                  style={s.input}
+                  style={{ ...s.input, ...(fieldErrors.address ? s.inputError : {}) }}
                   type="text"
                   value={form.address}
-                  onChange={(e) => setField('address', e.target.value)}
+                  onChange={(e) => handleFieldChange('address', e.target.value)}
                   disabled={saving}
                 />
+                {fieldErrors.address && <div style={s.fieldError}>{fieldErrors.address}</div>}
               </div>
               <div style={s.fieldRow}>
                 <div style={s.field}>
@@ -836,12 +797,43 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-city"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.city ? s.inputError : {}) }}
                     type="text"
                     value={form.city}
-                    onChange={(e) => setField('city', e.target.value)}
+                    onChange={(e) => handleFieldChange('city', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.city && <div style={s.fieldError}>{fieldErrors.city}</div>}
+                </div>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-state">
+                    State / Province
+                  </label>
+                  <input
+                    id="p-state"
+                    style={{ ...s.input, ...(fieldErrors.state ? s.inputError : {}) }}
+                    type="text"
+                    value={form.state}
+                    onChange={(e) => handleFieldChange('state', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.state && <div style={s.fieldError}>{fieldErrors.state}</div>}
+                </div>
+              </div>
+              <div style={s.fieldRow}>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-zip">
+                    Zip / Postal Code
+                  </label>
+                  <input
+                    id="p-zip"
+                    style={{ ...s.input, ...(fieldErrors.zipCode ? s.inputError : {}) }}
+                    type="text"
+                    value={form.zipCode}
+                    onChange={(e) => handleFieldChange('zipCode', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.zipCode && <div style={s.fieldError}>{fieldErrors.zipCode}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-country">
@@ -849,16 +841,17 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-country"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.country ? s.inputError : {}) }}
                     type="text"
                     value={form.country}
-                    onChange={(e) => setField('country', e.target.value)}
+                    onChange={(e) => handleFieldChange('country', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.country && <div style={s.fieldError}>{fieldErrors.country}</div>}
                 </div>
               </div>
 
-              {/* Financials */}
+              {/* Details & Financials */}
               <div style={s.sectionTitle}>Details & Financials</div>
               <div style={s.fieldRow}>
                 <div style={s.field}>
@@ -867,13 +860,14 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-beds"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.bedrooms ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     value={form.bedrooms}
-                    onChange={(e) => setField('bedrooms', e.target.value)}
+                    onChange={(e) => handleFieldChange('bedrooms', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.bedrooms && <div style={s.fieldError}>{fieldErrors.bedrooms}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-baths">
@@ -881,13 +875,14 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-baths"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.bathrooms ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     value={form.bathrooms}
-                    onChange={(e) => setField('bathrooms', e.target.value)}
+                    onChange={(e) => handleFieldChange('bathrooms', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.bathrooms && <div style={s.fieldError}>{fieldErrors.bathrooms}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-sqft">
@@ -895,29 +890,31 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-sqft"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.squareFeet ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     value={form.squareFeet}
-                    onChange={(e) => setField('squareFeet', e.target.value)}
+                    onChange={(e) => handleFieldChange('squareFeet', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.squareFeet && <div style={s.fieldError}>{fieldErrors.squareFeet}</div>}
                 </div>
               </div>
               <div style={s.fieldRow}>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-rent">
-                    Default Rent
+                    Default Rent (QAR)
                   </label>
                   <input
                     id="p-rent"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.defaultRent ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     value={form.defaultRent}
-                    onChange={(e) => setField('defaultRent', e.target.value)}
+                    onChange={(e) => handleFieldChange('defaultRent', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.defaultRent && <div style={s.fieldError}>{fieldErrors.defaultRent}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-contact">
@@ -925,17 +922,76 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-contact"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.contactNumber ? s.inputError : {}) }}
                     type="text"
                     value={form.contactNumber}
-                    onChange={(e) => setField('contactNumber', e.target.value)}
+                    onChange={(e) => handleFieldChange('contactNumber', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.contactNumber && <div style={s.fieldError}>{fieldErrors.contactNumber}</div>}
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                    Shown on the listing page with WhatsApp &amp; Call buttons
+                  </div>
+                </div>
+              </div>
+
+              {/* Purchase Information */}
+              <div style={s.sectionTitle}>Purchase Information <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(if purchased)</span></div>
+              <div style={s.fieldRow}>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-pprice">
+                    Purchase Price (QAR)
+                  </label>
+                  <input
+                    id="p-pprice"
+                    style={{ ...s.input, ...(fieldErrors.purchasePrice ? s.inputError : {}) }}
+                    type="number"
+                    min="0"
+                    value={form.purchasePrice}
+                    onChange={(e) => handleFieldChange('purchasePrice', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.purchasePrice && <div style={s.fieldError}>{fieldErrors.purchasePrice}</div>}
+                </div>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-curval">
+                    Current Value (QAR)
+                  </label>
+                  {form.type === 'master' && (
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.3rem', lineHeight: 1.4 }}>
+                      {unitsSumValue !== null
+                        ? <>Auto-filled from sum of unit values (<strong>QAR {unitsSumValue.toLocaleString()}</strong>). You can override this.</>
+                        : 'For master properties, this should equal the sum of all unit values. It is used as the portfolio value on the dashboard.'}
+                    </div>
+                  )}
+                  <input
+                    id="p-curval"
+                    style={{ ...s.input, ...(fieldErrors.currentValue ? s.inputError : {}) }}
+                    type="number"
+                    min="0"
+                    value={form.currentValue}
+                    onChange={(e) => handleFieldChange('currentValue', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.currentValue && <div style={s.fieldError}>{fieldErrors.currentValue}</div>}
+                </div>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-pdate">
+                    Purchase Date
+                  </label>
+                  <input
+                    id="p-pdate"
+                    style={s.input}
+                    type="date"
+                    value={form.purchaseDate}
+                    onChange={(e) => handleFieldChange('purchaseDate', e.target.value)}
                     disabled={saving}
                   />
                 </div>
               </div>
 
               {/* Owner */}
-              <div style={s.sectionTitle}>Owner Information</div>
+              <div style={s.sectionTitle}>Owner Information <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(if rented)</span></div>
               <div style={s.fieldRow}>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-oname">
@@ -943,12 +999,13 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-oname"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.ownerName ? s.inputError : {}) }}
                     type="text"
                     value={form.ownerName}
-                    onChange={(e) => setField('ownerName', e.target.value)}
+                    onChange={(e) => handleFieldChange('ownerName', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.ownerName && <div style={s.fieldError}>{fieldErrors.ownerName}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-ophone">
@@ -956,12 +1013,13 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-ophone"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.ownerPhone ? s.inputError : {}) }}
                     type="text"
                     value={form.ownerPhone}
-                    onChange={(e) => setField('ownerPhone', e.target.value)}
+                    onChange={(e) => handleFieldChange('ownerPhone', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.ownerPhone && <div style={s.fieldError}>{fieldErrors.ownerPhone}</div>}
                 </div>
               </div>
               <div style={s.fieldRow}>
@@ -971,12 +1029,13 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-oemail"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.ownerEmail ? s.inputError : {}) }}
                     type="email"
                     value={form.ownerEmail}
-                    onChange={(e) => setField('ownerEmail', e.target.value)}
+                    onChange={(e) => handleFieldChange('ownerEmail', e.target.value)}
                     disabled={saving}
                   />
+                  {fieldErrors.ownerEmail && <div style={s.fieldError}>{fieldErrors.ownerEmail}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="p-orent">
@@ -984,11 +1043,42 @@ export default function PropertiesPage() {
                   </label>
                   <input
                     id="p-orent"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.ownerMonthlyRent ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     value={form.ownerMonthlyRent}
-                    onChange={(e) => setField('ownerMonthlyRent', e.target.value)}
+                    onChange={(e) => handleFieldChange('ownerMonthlyRent', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.ownerMonthlyRent && <div style={s.fieldError}>{fieldErrors.ownerMonthlyRent}</div>}
+                </div>
+              </div>
+              <div style={s.fieldRow}>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-ocontact">
+                    Owner Contact Address
+                  </label>
+                  <input
+                    id="p-ocontact"
+                    style={{ ...s.input, ...(fieldErrors.ownerContact ? s.inputError : {}) }}
+                    type="text"
+                    placeholder="e.g. P.O. Box 123, Doha"
+                    value={form.ownerContact}
+                    onChange={(e) => handleFieldChange('ownerContact', e.target.value)}
+                    disabled={saving}
+                  />
+                  {fieldErrors.ownerContact && <div style={s.fieldError}>{fieldErrors.ownerContact}</div>}
+                </div>
+                <div style={s.field}>
+                  <label style={s.label} htmlFor="p-orentstart">
+                    Rent Start Date
+                  </label>
+                  <input
+                    id="p-orentstart"
+                    style={s.input}
+                    type="date"
+                    value={form.ownerRentStartDate}
+                    onChange={(e) => handleFieldChange('ownerRentStartDate', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -1001,11 +1091,12 @@ export default function PropertiesPage() {
                 </label>
                 <textarea
                   id="p-notes"
-                  style={s.textarea}
+                  style={{ ...s.textarea, ...(fieldErrors.notes ? s.inputError : {}) }}
                   value={form.notes}
-                  onChange={(e) => setField('notes', e.target.value)}
+                  onChange={(e) => handleFieldChange('notes', e.target.value)}
                   disabled={saving}
                 />
+                {fieldErrors.notes && <div style={s.fieldError}>{fieldErrors.notes}</div>}
               </div>
 
               <div style={s.modalActions}>
@@ -1027,6 +1118,24 @@ export default function PropertiesPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete confirm dialog */}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete Property"
+          message={
+            <>
+              Are you sure you want to delete{' '}
+              <strong>{deleteTarget.propertyName}</strong>? This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          isLoading={deleting}
+          isDanger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </div>
   );

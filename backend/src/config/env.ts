@@ -81,6 +81,17 @@ const envSchema = z.object({
   // ── Cron ─────────────────────────────────────────────────────────────────
   /** Cron schedule for recurring invoice generation. Default: 00:05 on 1st of each month */
   CRON_INVOICE_SCHEDULE: z.string().default('5 0 1 * *'),
+
+  // ── Cookie security ───────────────────────────────────────────────────────
+  /**
+   * Whether the refresh token cookie requires HTTPS (secure flag).
+   * Defaults to true in production. Set to false when hosting on a bare IP
+   * without SSL — required until a domain + TLS certificate is configured.
+   */
+  COOKIE_SECURE: z
+    .string()
+    .transform((v) => v !== 'false')
+    .default('true'),
 });
 
 /** Inferred TypeScript type for env — use this for typed access throughout the app */

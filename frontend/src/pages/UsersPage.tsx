@@ -1,41 +1,32 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
-import type { AxiosError } from 'axios';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@context/AuthContext';
 import { usersApi } from '@api/users.api';
-import type { ApiUser, CreateUserInput, UpdateUserInput, PaginationMeta } from '@api/users.api';
+import type { ApiUser, CreateUserInput, UpdateUserInput, PaginationMeta, UserStats } from '@api/users.api';
 import type { UserRole } from '@api/auth.types';
+import { addUserSchema, editUserSchema } from '@validations/user.form.schema';
+import { sh } from '@/styles/shared';
+import { resolveError, zodFieldErrors } from '@utils/formHelpers';
+import type { FieldErrors } from '@utils/formHelpers';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { formatDateLong, formatDateTime } from '@utils/formatDate';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = {
-  page: { padding: '1.5rem' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' },
-  title: { fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e' },
-  addBtn: { padding: '0.5rem 1rem', backgroundColor: '#4f8ef7', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' },
-  errorBanner: { backgroundColor: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', borderRadius: '4px', padding: '0.6rem 0.75rem', fontSize: '0.8rem', marginBottom: '1rem' },
-  table: { width: '100%', borderCollapse: 'collapse' as const, backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
-  th: { textAlign: 'left' as const, padding: '0.75rem 1rem', fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', textTransform: 'uppercase' as const, letterSpacing: '0.05em' },
-  td: { padding: '0.75rem 1rem', fontSize: '0.875rem', color: '#374151', borderBottom: '1px solid #f3f4f6' },
-  actionBtn: { padding: '0.25rem 0.6rem', fontSize: '0.78rem', borderRadius: '3px', cursor: 'pointer', border: '1px solid', marginLeft: '0.4rem' },
-  editBtn: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  deleteBtn: { backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#dc2626' },
-  badge: { display: 'inline-block', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 600 },
-  pagination: { display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '1rem', justifyContent: 'flex-end' },
-  pageBtn: { padding: '0.35rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '0.8rem' },
-  // Modal overlay
-  overlay: { position: 'fixed' as const, inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 },
-  modal: { backgroundColor: '#fff', borderRadius: '8px', padding: '2rem', width: '420px', maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' },
-  modalTitle: { fontSize: '1.1rem', fontWeight: 700, color: '#1a1a2e', marginBottom: '1.25rem' },
-  field: { marginBottom: '0.875rem' },
-  label: { display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.3rem' },
-  input: { width: '100%', padding: '0.5rem 0.65rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', color: '#111', boxSizing: 'border-box' as const },
-  select: { width: '100%', padding: '0.5rem 0.65rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', color: '#111', backgroundColor: '#fff', boxSizing: 'border-box' as const },
-  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' },
-  cancelBtn: { padding: '0.5rem 1rem', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '0.875rem' },
-  submitBtn: { padding: '0.5rem 1rem', backgroundColor: '#4f8ef7', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' },
-  confirmText: { fontSize: '0.875rem', color: '#374151', marginBottom: '1rem' },
-  confirmDeleteBtn: { padding: '0.5rem 1rem', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' },
+  ...sh,
+  // Stats cards
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' },
+  statCard: { backgroundColor: '#fff', borderRadius: '8px', padding: '1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' },
+  statLabel: { fontSize: '0.72rem', color: '#9ca3af', fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '0.2rem' },
+  statValue: { fontSize: '1.6rem', fontWeight: 700, color: '#1a1a2e' },
+  // Filters
+  filtersRow: { display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' as const, alignItems: 'center' },
+  filterInput: { padding: '0.45rem 0.65rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', color: '#111', flex: '1 1 220px', minWidth: '180px' },
+  clearBtn: { padding: '0.45rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer', fontSize: '0.8rem', color: '#6b7280' },
+  // Table extras
+  selfTag: { fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.4rem', fontStyle: 'italic' as const },
 } as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,37 +41,16 @@ function roleBadgeStyle(role: UserRole): React.CSSProperties {
 }
 
 function statusBadgeStyle(status: string): React.CSSProperties {
-  return {
-    ...s.badge,
-    ...(status === 'ACTIVE'
-      ? { backgroundColor: '#d1fae5', color: '#065f46' }
-      : { backgroundColor: '#fee2e2', color: '#991b1b' }),
+  const map: Record<string, React.CSSProperties> = {
+    ACTIVE: { backgroundColor: '#d1fae5', color: '#065f46' },
+    SUSPENDED: { backgroundColor: '#fee2e2', color: '#991b1b' },
   };
+  return { ...s.badge, ...(map[status] ?? { backgroundColor: '#f3f4f6', color: '#6b7280' }) };
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+// ── Form state ────────────────────────────────────────────────────────────────
 
-function resolveError(err: unknown): string {
-  const e = err as AxiosError<{ error?: { code?: string; message?: string } }>;
-  const code = e.response?.data?.error?.code;
-  switch (code) {
-    case 'DUPLICATE': return 'An account with this email already exists.';
-    case 'FORBIDDEN': return e.response?.data?.error?.message ?? 'Permission denied.';
-    case 'NOT_FOUND': return 'User not found.';
-    case 'CONFLICT': return e.response?.data?.error?.message ?? 'Action not allowed.';
-    case 'VALIDATION_ERROR': return e.response?.data?.error?.message ?? 'Validation failed. Check your inputs.';
-    default: return 'An unexpected error occurred. Please try again.';
-  }
-}
-
-// ── Modal form state ──────────────────────────────────────────────────────────
-
-interface ModalState {
-  mode: 'add' | 'edit';
-  target?: ApiUser;
-}
+interface ModalState { mode: 'add' | 'edit'; target?: ApiUser }
 
 interface FormState {
   firstName: string;
@@ -94,29 +64,11 @@ interface FormState {
 }
 
 function emptyForm(): FormState {
-  return {
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: '',
-    status: 'ACTIVE',
-    phone: '',
-  };
+  return { firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: '', status: 'ACTIVE', phone: '' };
 }
 
 function formFromUser(u: ApiUser): FormState {
-  return {
-    firstName: u.firstName ?? '',
-    lastName: u.lastName ?? '',
-    email: u.email,
-    password: '',
-    confirmPassword: '',
-    role: u.role,
-    status: u.status,
-    phone: u.phone ?? '',
-  };
+  return { firstName: u.firstName ?? '', lastName: u.lastName ?? '', email: u.email, password: '', confirmPassword: '', role: u.role, status: u.status, phone: u.phone ?? '' };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -124,28 +76,44 @@ function formFromUser(u: ApiUser): FormState {
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
 
-  // ── All hooks must be declared unconditionally (Rules of Hooks) ───────────
+  // ── State (all hooks before any conditional return) ───────────────────────
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
 
+  // Filters
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<UserRole | ''>('');
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'SUSPENDED' | ''>('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Modal
   const [modal, setModal] = useState<ModalState | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Delete
   const [confirmDelete, setConfirmDelete] = useState<ApiUser | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    document.body.style.overflow = modal || confirmDelete ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [modal, confirmDelete]);
+
   // ── Fetch users ───────────────────────────────────────────────────────────
-  const fetchUsers = useCallback(async (p: number) => {
+  const fetchUsers = useCallback(async (p: number, s: string, r: UserRole | '', st: 'ACTIVE' | 'SUSPENDED' | '') => {
     setLoading(true);
     setListError('');
     try {
-      const { users: list, meta: m } = await usersApi.list(p);
+      const { users: list, meta: m } = await usersApi.list({ page: p, search: s || undefined, role: r || undefined, status: st || undefined });
       setUsers(list);
       setMeta(m);
     } catch (err) {
@@ -155,52 +123,111 @@ export default function UsersPage() {
     }
   }, []);
 
+  const fetchStats = useCallback(async () => {
+    try {
+      const stats = await usersApi.stats();
+      setUserStats(stats);
+    } catch {
+      // non-critical — stats are supplementary
+    }
+  }, []);
+
   useEffect(() => {
-    void fetchUsers(page);
-  }, [page, fetchUsers]);
+    void fetchUsers(page, search, roleFilter, statusFilter);
+    // search is intentionally excluded — it's handled via the debounce handler
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, roleFilter, statusFilter, fetchUsers]);
+
+  useEffect(() => {
+    void fetchStats();
+  }, [fetchStats]);
 
   // ── Role guard — after all hooks ──────────────────────────────────────────
   if (currentUser?.role === 'STAFF') return <Navigate to="/dashboard" replace />;
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isAdminOrAbove = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
+
+  // ── Search debounce ───────────────────────────────────────────────────────
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    setPage(1);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      void fetchUsers(1, val, roleFilter, statusFilter);
+    }, 400);
+  }
+
+  function clearFilters() {
+    setSearch('');
+    setRoleFilter('');
+    setStatusFilter('');
+    setPage(1);
+    void fetchUsers(1, '', '', '');
+  }
 
   // ── Modal helpers ─────────────────────────────────────────────────────────
   function openAdd() {
     setForm(emptyForm());
+    setFieldErrors({});
     setFormError('');
     setModal({ mode: 'add' });
   }
 
   function openEdit(u: ApiUser) {
     setForm(formFromUser(u));
+    setFieldErrors({});
     setFormError('');
     setModal({ mode: 'edit', target: u });
   }
 
   function closeModal() {
     setModal(null);
+    setFieldErrors({});
     setFormError('');
+  }
+
+  // ── Real-time per-field validation ────────────────────────────────────────
+  function validateField(name: keyof FormState, value: string, currentForm: FormState) {
+    const schema = modal?.mode === 'add' ? addUserSchema : editUserSchema;
+    const testData = { ...currentForm, [name]: value };
+    const result = schema.safeParse(testData);
+    if (result.success) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
+    } else {
+      const errs = zodFieldErrors(result.error);
+      if (errs[name]) {
+        setFieldErrors((prev) => ({ ...prev, [name]: errs[name] }));
+      } else {
+        setFieldErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
+      }
+    }
+  }
+
+  function handleFieldChange<K extends keyof FormState>(name: K, value: FormState[K]) {
+    const newForm = { ...form, [name]: value };
+    setForm(newForm);
+    validateField(name, String(value), newForm);
+    // If updating password, also re-validate confirmPassword
+    if (name === 'password') validateField('confirmPassword', newForm.confirmPassword, newForm);
   }
 
   // ── Form submission ───────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
-      setSubmitting(true);
-      // Validate passwords match for add, and for edit when a new password was entered
-      if (modal?.mode === 'add') {
-        if (form.password !== form.confirmPassword) {
-          setFormError('Passwords do not match.');
-          setSubmitting(false);
-          return;
-        }
-      } else if (modal?.mode === 'edit' && form.password) {
-        if (form.password !== form.confirmPassword) {
-          setFormError('Passwords do not match.');
-          setSubmitting(false);
-          return;
-        }
-      }
+
+    const schema = modal?.mode === 'add' ? addUserSchema : editUserSchema;
+    const result = schema.safeParse(form);
+
+    if (!result.success) {
+      setFieldErrors(zodFieldErrors(result.error));
+      setFormError(result.error.issues[0]?.message ?? 'Please fix the errors above.');
+      return;
+    }
+
+    setFieldErrors({});
+    setSubmitting(true);
     try {
       if (modal?.mode === 'add') {
         const payload: CreateUserInput = {
@@ -210,6 +237,7 @@ export default function UsersPage() {
           password: form.password,
           phone: form.phone || undefined,
           role: (form.role || undefined) as UserRole | undefined,
+          status: form.status,
         };
         await usersApi.create(payload);
       } else if (modal?.mode === 'edit' && modal.target) {
@@ -221,12 +249,12 @@ export default function UsersPage() {
           status: form.status,
           role: (form.role || undefined) as UserRole | undefined,
         };
-        // Only send password if the admin typed a new one
         if (form.password) payload.password = form.password;
         await usersApi.update(modal.target._id, payload);
       }
       closeModal();
-      void fetchUsers(page);
+      void fetchUsers(page, search, roleFilter, statusFilter);
+      void fetchStats();
     } catch (err) {
       setFormError(resolveError(err));
     } finally {
@@ -242,9 +270,9 @@ export default function UsersPage() {
     try {
       await usersApi.remove(confirmDelete._id);
       setConfirmDelete(null);
-      // If we deleted the last item on this page, go back one page
       if (users.length === 1 && page > 1) setPage(page - 1);
-      else void fetchUsers(page);
+      else void fetchUsers(page, search, roleFilter, statusFilter);
+      void fetchStats();
     } catch (err) {
       setDeleteError(resolveError(err));
     } finally {
@@ -257,11 +285,64 @@ export default function UsersPage() {
     <div style={s.page}>
       {/* Header */}
       <div style={s.header}>
-        <h1 style={s.title}>Users</h1>
-        <button style={s.addBtn} onClick={openAdd}>+ Add User</button>
+        <h1 style={s.title}>User Management</h1>
+        {isAdminOrAbove && (
+          <button style={s.addBtn} onClick={openAdd}>+ Add User</button>
+        )}
       </div>
 
+      {/* Stats Cards */}
+      {userStats && (
+        <div style={s.statsGrid}>
+          <div style={s.statCard}>
+            <div style={s.statLabel}>Total Users</div>
+            <div style={{ ...s.statValue, color: '#4f8ef7' }}>{userStats.total}</div>
+          </div>
+          <div style={s.statCard}>
+            <div style={s.statLabel}>Active Users</div>
+            <div style={{ ...s.statValue, color: '#059669' }}>{userStats.active}</div>
+          </div>
+          <div style={s.statCard}>
+            <div style={s.statLabel}>Inactive / Suspended</div>
+            <div style={{ ...s.statValue, color: '#dc2626' }}>{userStats.suspended}</div>
+          </div>
+        </div>
+      )}
+
       {listError && <div style={s.errorBanner}>{listError}</div>}
+
+      {/* Filters */}
+      <div style={s.filtersRow}>
+        <input
+          style={s.filterInput}
+          type="text"
+          placeholder="Search by name or email…"
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+        />
+        <select
+          style={s.filterSelect}
+          value={roleFilter}
+          onChange={(e) => { setRoleFilter(e.target.value as UserRole | ''); setPage(1); }}
+        >
+          <option value="">All Roles</option>
+          <option value="SUPER_ADMIN">Super Admin</option>
+          <option value="ADMIN">Admin</option>
+          <option value="STAFF">Staff</option>
+        </select>
+        <select
+          style={s.filterSelect}
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value as 'ACTIVE' | 'SUSPENDED' | ''); setPage(1); }}
+        >
+          <option value="">All Status</option>
+          <option value="ACTIVE">Active</option>
+          <option value="SUSPENDED">Suspended</option>
+        </select>
+        {(search || roleFilter || statusFilter) && (
+          <button style={s.clearBtn} onClick={clearFilters}>Clear</button>
+        )}
+      </div>
 
       {/* Table */}
       {loading ? (
@@ -273,9 +354,10 @@ export default function UsersPage() {
               <tr>
                 <th style={s.th}>Name</th>
                 <th style={s.th}>Email</th>
+                <th style={s.th}>Phone</th>
                 <th style={s.th}>Role</th>
                 <th style={s.th}>Status</th>
-                <th style={s.th}>Phone</th>
+                <th style={s.th}>Last Login</th>
                 <th style={s.th}>Created</th>
                 <th style={s.th}>Actions</th>
               </tr>
@@ -283,46 +365,76 @@ export default function UsersPage() {
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td style={{ ...s.td, color: '#9ca3af' }} colSpan={6}>No users found.</td>
+                  <td style={{ ...s.td, color: '#9ca3af' }} colSpan={8}>No users found.</td>
                 </tr>
               ) : (
                 users.map((u) => {
-                  //const isSelf = u._id === currentUser?.id;
-                  //const canDelete = isSuperAdmin && !isSelf;
-                  const canDelete =
-                    isSuperAdmin &&
-                    !!currentUser &&
-                    u._id !== currentUser.id;
+                  const isSelf = u._id === currentUser?.id;
+                  const canEdit = isAdminOrAbove && (!isSelf || isSuperAdmin);
+                  const canDelete = isSuperAdmin && !isSelf;
 
                   return (
                     <tr key={u._id}>
                       <td style={s.td}>
-                        {u.fullName ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim()}
+                        <Link
+                          to={`/users/${u._id}`}
+                          style={{ color: '#1d4ed8', textDecoration: 'none', fontWeight: 600 }}
+                        >
+                          {u.fullName ?? (`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || '—')}
+                        </Link>
+                        {isSelf && <span style={s.selfTag}>(You)</span>}
                       </td>
                       <td style={s.td}>{u.email}</td>
+                      <td style={{ ...s.td, color: u.phone ? '#374151' : '#9ca3af' }}>
+                        {u.phone ?? '—'}
+                      </td>
                       <td style={s.td}>
                         <span style={roleBadgeStyle(u.role)}>{u.role.replace('_', ' ')}</span>
                       </td>
                       <td style={s.td}>
                         <span style={statusBadgeStyle(u.status)}>{u.status}</span>
                       </td>
-                      <td style={{ ...s.td, color: u.phone ? '#374151' : '#9ca3af' }}>
-                        {u.phone ?? '—'}
+                      <td style={{ ...s.td, color: u.lastLogin ? '#374151' : '#9ca3af' }}>
+                        {u.lastLogin ? formatDateTime(u.lastLogin) : 'Never'}
                       </td>
-                      <td style={s.td}>{formatDate(u.createdAt)}</td>
-                      <td style={s.td}>
-                        <button
-                          style={{ ...s.actionBtn, ...s.editBtn }}
-                          onClick={() => openEdit(u)}
+                      <td style={s.td}>{formatDateLong(u.createdAt)}</td>
+                      <td style={{ ...s.td, whiteSpace: 'nowrap' as const }}>
+                        <Link
+                          to={`/users/${u._id}`}
+                          title="View profile"
+                          style={{ ...s.actionBtn, ...s.viewBtn, textDecoration: 'none' }}
                         >
-                          Edit
-                        </button>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </Link>
+                        {canEdit && (
+                          <button
+                            style={{ ...s.actionBtn, ...s.editBtn }}
+                            type="button"
+                            title="Edit user"
+                            onClick={() => openEdit(u)}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                          </button>
+                        )}
                         {canDelete && (
                           <button
                             style={{ ...s.actionBtn, ...s.deleteBtn }}
+                            type="button"
+                            title="Delete user"
                             onClick={() => { setDeleteError(''); setConfirmDelete(u); }}
                           >
-                            Delete
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            </svg>
                           </button>
                         )}
                       </td>
@@ -334,27 +446,7 @@ export default function UsersPage() {
           </table>
 
           {/* Pagination */}
-          {meta && meta.totalPages > 1 && (
-            <div style={s.pagination}>
-              <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                Page {meta.page} of {meta.totalPages} ({meta.total} users)
-              </span>
-              <button
-                style={{ ...s.pageBtn, opacity: meta.hasPrevPage ? 1 : 0.4 }}
-                disabled={!meta.hasPrevPage}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Prev
-              </button>
-              <button
-                style={{ ...s.pageBtn, opacity: meta.hasNextPage ? 1 : 0.4 }}
-                disabled={!meta.hasNextPage}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </button>
-            </div>
-          )}
+          {meta && <Pagination meta={meta} onPageChange={setPage} />}
         </>
       )}
 
@@ -364,91 +456,109 @@ export default function UsersPage() {
           <div style={s.modal}>
             <h2 style={s.modalTitle}>{modal.mode === 'add' ? 'Add User' : 'Edit User'}</h2>
 
-            {formError && <div style={{ ...s.errorBanner, marginBottom: '1rem' }}>{formError}</div>}
+            {formError && <div style={s.modalError}>{formError}</div>}
 
-            <form onSubmit={(e) => void handleSubmit(e)}>
+            <form onSubmit={(e) => void handleSubmit(e)} noValidate>
+              {/* First Name */}
               <div style={s.field}>
-                <label style={s.label} htmlFor="u-firstName">First Name</label>
+                <label style={s.label} htmlFor="u-firstName">First Name *</label>
                 <input
                   id="u-firstName"
-                  style={s.input}
+                  style={{ ...s.input, ...(fieldErrors.firstName ? s.inputError : {}) }}
                   type="text"
                   value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  required
+                  onChange={(e) => handleFieldChange('firstName', e.target.value)}
                   disabled={submitting}
+                  autoComplete="given-name"
                 />
+                {fieldErrors.firstName && <div style={s.fieldError}>{fieldErrors.firstName}</div>}
               </div>
 
+              {/* Last Name */}
               <div style={s.field}>
-                <label style={s.label} htmlFor="u-lastName">Last Name</label>
+                <label style={s.label} htmlFor="u-lastName">Last Name *</label>
                 <input
                   id="u-lastName"
-                  style={s.input}
+                  style={{ ...s.input, ...(fieldErrors.lastName ? s.inputError : {}) }}
                   type="text"
                   value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                  required
+                  onChange={(e) => handleFieldChange('lastName', e.target.value)}
                   disabled={submitting}
+                  autoComplete="family-name"
                 />
+                {fieldErrors.lastName && <div style={s.fieldError}>{fieldErrors.lastName}</div>}
               </div>
 
+              {/* Email */}
               <div style={s.field}>
-                <label style={s.label} htmlFor="u-email">Email</label>
+                <label style={s.label} htmlFor="u-email">Email *</label>
                 <input
                   id="u-email"
-                  style={s.input}
+                  style={{ ...s.input, ...(fieldErrors.email ? s.inputError : {}) }}
                   type="email"
                   value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  required
+                  onChange={(e) => handleFieldChange('email', e.target.value)}
                   disabled={submitting}
+                  autoComplete="email"
                 />
+                {fieldErrors.email && <div style={s.fieldError}>{fieldErrors.email}</div>}
               </div>
 
-              <div style={s.field}>
-                <label style={s.label} htmlFor="u-password">
-                  Password {modal.mode === 'edit' && <span style={{ fontWeight: 400, color: '#9ca3af' }}>(leave blank to keep current)</span>}
-                </label>
-                <input
-                  id="u-password"
-                  style={s.input}
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required={modal.mode === 'add'}
-                  autoComplete="new-password"
-                  disabled={submitting}
-                />
-              </div>
-
-              <div style={s.field}>
-                <label style={s.label} htmlFor="u-password-confirm">Confirm Password</label>
-                <input
-                  id="u-password-confirm"
-                  style={s.input}
-                  type="password"
-                  value={form.confirmPassword}
-                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                  required={modal.mode === 'add' || !!form.password}
-                  autoComplete="new-password"
-                  disabled={submitting}
-                />
-              </div>
-
+              {/* Phone */}
               <div style={s.field}>
                 <label style={s.label} htmlFor="u-phone">Phone</label>
                 <input
                   id="u-phone"
-                  style={s.input}
+                  style={{ ...s.input, ...(fieldErrors.phone ? s.inputError : {}) }}
                   type="tel"
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  onChange={(e) => handleFieldChange('phone', e.target.value)}
                   disabled={submitting}
+                  autoComplete="tel"
+                  placeholder="+974 XXXX XXXX"
                 />
+                {fieldErrors.phone && <div style={s.fieldError}>{fieldErrors.phone}</div>}
               </div>
 
-              {/* Role — only visible to SUPER_ADMIN */}
+              {/* Password */}
+              <div style={s.field}>
+                <label style={s.label} htmlFor="u-password">
+                  Password{modal.mode === 'add' ? ' *' : ''}
+                  {modal.mode === 'edit' && <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: '0.4rem' }}>(leave blank to keep current)</span>}
+                </label>
+                <input
+                  id="u-password"
+                  style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }}
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => handleFieldChange('password', e.target.value)}
+                  disabled={submitting}
+                  autoComplete="new-password"
+                />
+                {fieldErrors.password && <div style={s.fieldError}>{fieldErrors.password}</div>}
+                {!fieldErrors.password && (
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '0.2rem' }}>
+                    Min 8 chars · uppercase · lowercase · number · special character
+                  </div>
+                )}
+              </div>
+
+              {/* Confirm Password */}
+              <div style={s.field}>
+                <label style={s.label} htmlFor="u-password-confirm">Confirm Password{(modal.mode === 'add' || form.password) ? ' *' : ''}</label>
+                <input
+                  id="u-password-confirm"
+                  style={{ ...s.input, ...(fieldErrors.confirmPassword ? s.inputError : {}) }}
+                  type="password"
+                  value={form.confirmPassword}
+                  onChange={(e) => handleFieldChange('confirmPassword', e.target.value)}
+                  disabled={submitting}
+                  autoComplete="new-password"
+                />
+                {fieldErrors.confirmPassword && <div style={s.fieldError}>{fieldErrors.confirmPassword}</div>}
+              </div>
+
+              {/* Role — only SUPER_ADMIN can assign roles */}
               {isSuperAdmin && (
                 <div style={s.field}>
                   <label style={s.label} htmlFor="u-role">Role</label>
@@ -456,39 +566,41 @@ export default function UsersPage() {
                     id="u-role"
                     style={s.select}
                     value={form.role}
-                    onChange={(e) => setForm({ ...form, role: e.target.value as UserRole | '' })}
+                    onChange={(e) => handleFieldChange('role', e.target.value as UserRole | '')}
                     disabled={submitting}
                   >
-                    <option value="">STAFF (default)</option>
-                    <option value="STAFF">STAFF</option>
-                    <option value="ADMIN">ADMIN</option>
-                    <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                    <option value="">Staff (default)</option>
+                    <option value="STAFF">Staff</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="SUPER_ADMIN">Super Admin</option>
                   </select>
                 </div>
               )}
 
-              {/* Status — only on edit */}
-              {modal.mode === 'edit' && (
-                <div style={s.field}>
-                  <label style={s.label} htmlFor="u-status">Status</label>
-                  <select
-                    id="u-status"
-                    style={s.select}
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value as 'ACTIVE' | 'SUSPENDED' })}
-                    disabled={submitting}
-                  >
-                    <option value="ACTIVE">ACTIVE</option>
-                    <option value="SUSPENDED">SUSPENDED</option>
-                  </select>
-                </div>
-              )}
+              {/* Status */}
+              <div style={s.field}>
+                <label style={s.label} htmlFor="u-status">Status</label>
+                <select
+                  id="u-status"
+                  style={s.select}
+                  value={form.status}
+                  onChange={(e) => handleFieldChange('status', e.target.value as 'ACTIVE' | 'SUSPENDED')}
+                  disabled={submitting}
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </div>
 
               <div style={s.modalActions}>
                 <button style={s.cancelBtn} type="button" onClick={closeModal} disabled={submitting}>
                   Cancel
                 </button>
-                <button style={{ ...s.submitBtn, opacity: submitting ? 0.7 : 1 }} type="submit" disabled={submitting}>
+                <button
+                  style={{ ...s.submitBtn, ...(submitting ? s.submitBtnDisabled : {}) }}
+                  type="submit"
+                  disabled={submitting}
+                >
                   {submitting ? 'Saving…' : modal.mode === 'add' ? 'Create User' : 'Save Changes'}
                 </button>
               </div>
@@ -499,36 +611,21 @@ export default function UsersPage() {
 
       {/* Delete Confirmation Modal */}
       {confirmDelete && (
-        <div style={s.overlay} onClick={(e) => { if (e.target === e.currentTarget && !deleting) setConfirmDelete(null); }}>
-          <div style={s.modal}>
-            <h2 style={s.modalTitle}>Delete User</h2>
-            <p style={s.confirmText}>
+        <ConfirmDialog
+          title="Delete User"
+          message={
+            <>
               Are you sure you want to permanently delete{' '}
-              <strong>
-                {confirmDelete.fullName ?? confirmDelete.email}
-              </strong>? This action cannot be undone.
-            </p>
-            {deleteError && <div style={{ ...s.errorBanner, marginBottom: '1rem' }}>{deleteError}</div>}
-            <div style={s.modalActions}>
-              <button
-                style={s.cancelBtn}
-                type="button"
-                onClick={() => setConfirmDelete(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                style={{ ...s.confirmDeleteBtn, opacity: deleting ? 0.7 : 1 }}
-                type="button"
-                onClick={() => void handleDelete()}
-                disabled={deleting}
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+              <strong>{confirmDelete.fullName ?? confirmDelete.email}</strong>? This action cannot be undone.
+              {deleteError && <div style={{ ...s.errorBanner, marginTop: '0.75rem', marginBottom: 0 }}>{deleteError}</div>}
+            </>
+          }
+          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          isLoading={deleting}
+          isDanger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => { if (!deleting) setConfirmDelete(null); }}
+        />
       )}
     </div>
   );

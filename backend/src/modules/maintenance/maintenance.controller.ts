@@ -32,7 +32,7 @@ export const maintenanceAccessMiddleware: RequestHandler = asyncHandler(async (r
   const id = req.params['id'] as string;
   validateObjectId(id, 'maintenance request ID');
 
-  const doc = await MaintenanceRequest.findById(id).lean();
+  const doc = await MaintenanceRequest.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
   if (!doc) throw ApiError.notFound('Maintenance request');
 
   const { role, id: userId } = req.user!;
@@ -63,7 +63,7 @@ export const listMaintenanceRequests: RequestHandler = asyncHandler(async (req, 
   const skip = (page - 1) * limit;
 
   // BL-04 data scoping — maintenance userId = property.userId (denormalized at create)
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
   if (role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN) {
     filter['userId'] = new mongoose.Types.ObjectId(userId);
   }
@@ -72,6 +72,11 @@ export const listMaintenanceRequests: RequestHandler = asyncHandler(async (req, 
     const pid = req.query['propertyId'] as string;
     validateObjectId(pid, 'propertyId');
     filter['propertyId'] = new mongoose.Types.ObjectId(pid);
+  }
+  if (req.query['tenantId']) {
+    const tid = req.query['tenantId'] as string;
+    validateObjectId(tid, 'tenantId');
+    filter['tenantId'] = new mongoose.Types.ObjectId(tid);
   }
   if (req.query['status']) {
     filter['status'] = req.query['status'];
@@ -181,6 +186,8 @@ export const updateMaintenanceRequest: RequestHandler = asyncHandler(async (req,
  * DELETE /api/maintenance/:id
  */
 export const deleteMaintenanceRequest: RequestHandler = asyncHandler(async (req, res) => {
-  await MaintenanceRequest.findByIdAndDelete(req.maintenanceDoc!._id);
+  await MaintenanceRequest.findByIdAndUpdate(req.maintenanceDoc!._id, {
+    $set: { isDeleted: true },
+  });
   return ApiResponse.noContent(res);
 });

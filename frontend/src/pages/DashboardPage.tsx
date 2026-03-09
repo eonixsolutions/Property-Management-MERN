@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { dashboardApi } from '@api/dashboard.api';
 import type {
   DashboardData,
   DashboardCashflowItem,
   DashboardExpenseCategory,
+  DashboardMaintenanceRequest,
 } from '@api/dashboard.api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,7 +107,7 @@ const s = {
     overflow: 'hidden',
     marginBottom: '0.25rem',
   },
-};
+} as const;
 
 function badge(label: string, color: string, bg: string) {
   return (
@@ -154,29 +156,11 @@ function CashflowChart({ data }: { data: DashboardCashflowItem[] }) {
       <div style={s.sectionTitle}>12-Month Cashflow</div>
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
         <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: '#4f8ef7',
-              marginRight: '4px',
-            }}
-          />
+          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#4f8ef7', marginRight: '4px' }} />
           Income
         </span>
         <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: '#f87171',
-              marginRight: '4px',
-            }}
-          />
+          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f87171', marginRight: '4px' }} />
           Expenses
         </span>
       </div>
@@ -185,32 +169,14 @@ function CashflowChart({ data }: { data: DashboardCashflowItem[] }) {
           {data.map((item) => (
             <div
               key={item.month}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'stretch',
-                gap: '1px',
-                justifyContent: 'flex-end',
-                height: '100%',
-              }}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '1px', justifyContent: 'flex-end', height: '100%' }}
             >
               <div
-                style={{
-                  flex: 'none',
-                  height: `${Math.max((item.income / maxVal) * 100, 2)}%`,
-                  backgroundColor: '#4f8ef7',
-                  borderRadius: '2px 2px 0 0',
-                }}
+                style={{ flex: 'none', height: `${Math.max((item.income / maxVal) * 100, 2)}%`, backgroundColor: '#4f8ef7', borderRadius: '2px 2px 0 0' }}
                 title={`Income: ${fmt(item.income)}`}
               />
               <div
-                style={{
-                  flex: 'none',
-                  height: `${Math.max((item.expenses / maxVal) * 100, 2)}%`,
-                  backgroundColor: '#f87171',
-                  borderRadius: '2px 2px 0 0',
-                }}
+                style={{ flex: 'none', height: `${Math.max((item.expenses / maxVal) * 100, 2)}%`, backgroundColor: '#f87171', borderRadius: '2px 2px 0 0' }}
                 title={`Expenses: ${fmt(item.expenses)}`}
               />
             </div>
@@ -218,16 +184,7 @@ function CashflowChart({ data }: { data: DashboardCashflowItem[] }) {
         </div>
         <div style={{ display: 'flex', gap: '2px', marginTop: '4px' }}>
           {data.map((item) => (
-            <div
-              key={item.month}
-              style={{
-                flex: 1,
-                fontSize: '0.6rem',
-                color: '#9ca3af',
-                textAlign: 'center',
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <div key={item.month} style={{ flex: 1, fontSize: '0.6rem', color: '#9ca3af', textAlign: 'center', whiteSpace: 'nowrap' }}>
               {fmtMonth(item.month)}
             </div>
           ))}
@@ -247,27 +204,12 @@ function ExpensesChart({ data }: { data: DashboardExpenseCategory[] }) {
       )}
       {data.map((item) => (
         <div key={item.category} style={{ marginBottom: '0.6rem' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: '0.78rem',
-              color: '#374151',
-              marginBottom: '2px',
-            }}
-          >
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#374151', marginBottom: '2px' }}>
             <span>{item.category}</span>
             <span style={{ fontWeight: 600 }}>{fmt(item.amount)}</span>
           </div>
           <div style={s.progressBg}>
-            <div
-              style={{
-                height: '8px',
-                width: `${(item.amount / max) * 100}%`,
-                backgroundColor: '#f87171',
-                borderRadius: '4px',
-              }}
-            />
+            <div style={{ height: '8px', width: `${(item.amount / max) * 100}%`, backgroundColor: '#f87171', borderRadius: '4px' }} />
           </div>
         </div>
       ))}
@@ -300,7 +242,7 @@ export default function DashboardPage() {
 
       {data && (
         <>
-          {/* Property Stats */}
+          {/* Row 1 — Property Stats */}
           <div style={s.grid4}>
             <KpiCard
               label="Total Properties"
@@ -316,7 +258,25 @@ export default function DashboardPage() {
             <KpiCard label="Portfolio Value" value={fmt(data.propertyStats.totalPropertyValue)} />
           </div>
 
-          {/* Financial Summary */}
+          {/* Row 2 — Vacant units (only shown when units exist) */}
+          {data.propertyStats.units > 0 && (
+            <div style={s.grid4}>
+              <KpiCard label="Total Units" value={String(data.propertyStats.units)} />
+              <KpiCard
+                label="Vacant Units"
+                value={String(data.propertyStats.vacantUnitsCount)}
+                subColor={data.propertyStats.vacantUnitsCount > 0 ? '#d97706' : '#059669'}
+                sub={data.propertyStats.vacantUnitsCount > 0 ? 'units available' : 'fully occupied'}
+              />
+              <KpiCard
+                label="Vacant Units Value"
+                value={fmt(data.propertyStats.vacantUnitsValue)}
+                sub="potential monthly rent"
+              />
+            </div>
+          )}
+
+          {/* Row 3 — Financial Summary */}
           <div style={s.grid4}>
             <KpiCard
               label="This Month Income"
@@ -328,30 +288,43 @@ export default function DashboardPage() {
               value={fmt(data.financialSummary.currentMonthExpenses)}
             />
             <KpiCard
-              label="This Month Net"
+              label="Net Profit (This Month)"
               value={fmt(data.financialSummary.currentMonthNet)}
               subColor={data.financialSummary.currentMonthNet >= 0 ? '#059669' : '#dc2626'}
               sub={data.financialSummary.currentMonthNet >= 0 ? 'Profit' : 'Loss'}
             />
             <KpiCard
-              label="Maintenance Pending"
-              value={String(data.maintenanceSummary.pendingCount)}
-              sub="requests open"
+              label="Cash-on-Cash Return"
+              value={`${data.financialSummary.cashOnCashReturn}%`}
+              sub="annualized"
+              subColor={data.financialSummary.cashOnCashReturn >= 0 ? '#059669' : '#dc2626'}
             />
           </div>
 
-          {/* Rent Alert Row */}
+          {/* Row 4 — Rent & Maintenance Status */}
           <div style={s.grid4}>
             <KpiCard
-              label="Overdue Invoices"
+              label="Overdue Rent"
               value={String(data.rentStatus.overdueCount)}
-              sub={fmt(data.rentStatus.overdueAmount)}
-              subColor="#dc2626"
+              sub={data.rentStatus.overdueCount > 0 ? fmt(data.rentStatus.overdueAmount) : 'All clear'}
+              subColor={data.rentStatus.overdueCount > 0 ? '#dc2626' : '#059669'}
+            />
+            <KpiCard
+              label="Overdue Owner Payments"
+              value={String(data.rentStatus.overdueOwnerCount)}
+              sub={data.rentStatus.overdueOwnerCount > 0 ? fmt(data.rentStatus.overdueOwnerAmount) : 'All clear'}
+              subColor={data.rentStatus.overdueOwnerCount > 0 ? '#dc2626' : '#059669'}
             />
             <KpiCard
               label="Upcoming Rent (30d)"
               value={fmt(data.rentStatus.upcomingAmount)}
               sub="pending payments"
+            />
+            <KpiCard
+              label="Maintenance Open"
+              value={String(data.maintenanceSummary.pendingCount)}
+              sub="pending or in progress"
+              subColor={data.maintenanceSummary.pendingCount > 0 ? '#d97706' : '#059669'}
             />
           </div>
 
@@ -363,81 +336,161 @@ export default function DashboardPage() {
 
           {/* Recent Transactions */}
           <div style={{ ...s.card, marginBottom: '1rem' }}>
-            <div style={s.sectionTitle}>Recent Transactions</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div style={s.sectionTitle}>Recent Transactions</div>
+              <Link to="/transactions" style={{ fontSize: '0.8rem', color: '#4f8ef7', textDecoration: 'none' }}>View All</Link>
+            </div>
             {data.recentTransactions.length === 0 ? (
               <p style={{ fontSize: '0.82rem', color: '#9ca3af' }}>No transactions yet.</p>
             ) : (
-              <table style={s.table}>
-                <thead>
-                  <tr>
-                    <th style={s.th}>Date</th>
-                    <th style={s.th}>Category</th>
-                    <th style={s.th}>Description</th>
-                    <th style={s.th}>Type</th>
-                    <th style={s.thRight}>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recentTransactions.map((tx) => (
-                    <tr key={tx._id}>
-                      <td style={s.td}>{fmtDate(tx.transactionDate)}</td>
-                      <td style={s.td}>{tx.category}</td>
-                      <td style={s.td}>{tx.description ?? '—'}</td>
-                      <td style={s.td}>
-                        {badge(
-                          tx.type,
-                          tx.type === 'Income' ? '#065f46' : '#991b1b',
-                          tx.type === 'Income' ? '#d1fae5' : '#fee2e2',
-                        )}
-                      </td>
-                      <td
-                        style={{
-                          ...s.tdRight,
-                          fontWeight: 600,
-                          color: tx.type === 'Income' ? '#059669' : '#dc2626',
-                        }}
-                      >
-                        {fmt(tx.amount)}
-                      </td>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={s.table}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Date</th>
+                      <th style={s.th}>Property</th>
+                      <th style={s.th}>Category</th>
+                      <th style={s.th}>Description</th>
+                      <th style={s.th}>Type</th>
+                      <th style={s.thRight}>Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.recentTransactions.map((tx) => {
+                      const propName =
+                        tx.propertyId && typeof tx.propertyId === 'object'
+                          ? tx.propertyId.propertyName
+                          : '—';
+                      return (
+                        <tr key={tx._id}>
+                          <td style={s.td}>{fmtDate(tx.transactionDate)}</td>
+                          <td style={{ ...s.td, color: '#6b7280' }}>{propName}</td>
+                          <td style={s.td}>{tx.category}</td>
+                          <td style={s.td}>{tx.description ?? '—'}</td>
+                          <td style={s.td}>
+                            {badge(
+                              tx.type,
+                              tx.type === 'Income' ? '#065f46' : '#991b1b',
+                              tx.type === 'Income' ? '#d1fae5' : '#fee2e2',
+                            )}
+                          </td>
+                          <td style={{ ...s.tdRight, fontWeight: 600, color: tx.type === 'Income' ? '#059669' : '#dc2626' }}>
+                            {fmt(tx.amount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
           {/* Upcoming Rent */}
-          <div style={s.card}>
-            <div style={s.sectionTitle}>Upcoming Rent Payments</div>
+          <div style={{ ...s.card, marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div style={s.sectionTitle}>Upcoming Rent Payments</div>
+              <Link to="/rent" style={{ fontSize: '0.8rem', color: '#4f8ef7', textDecoration: 'none' }}>View All</Link>
+            </div>
             {data.upcomingRentPayments.length === 0 ? (
               <p style={{ fontSize: '0.82rem', color: '#9ca3af' }}>No upcoming payments.</p>
             ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={s.table}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Tenant</th>
+                      <th style={s.th}>Property</th>
+                      <th style={s.th}>Due Date</th>
+                      <th style={s.th}>Status</th>
+                      <th style={s.thRight}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.upcomingRentPayments.map((rp) => {
+                      const tenantName =
+                        rp.tenantId && typeof rp.tenantId === 'object'
+                          ? `${rp.tenantId.firstName} ${rp.tenantId.lastName}`
+                          : '—';
+                      const propName =
+                        rp.propertyId && typeof rp.propertyId === 'object'
+                          ? rp.propertyId.propertyName
+                          : '—';
+                      return (
+                        <tr key={rp._id}>
+                          <td style={s.td}>{tenantName}</td>
+                          <td style={{ ...s.td, color: '#6b7280' }}>{propName}</td>
+                          <td style={s.td}>{fmtDate(rp.dueDate)}</td>
+                          <td style={s.td}>
+                            {badge(
+                              rp.status,
+                              rp.status === 'Overdue' ? '#991b1b' : '#92400e',
+                              rp.status === 'Overdue' ? '#fee2e2' : '#fef3c7',
+                            )}
+                          </td>
+                          <td style={{ ...s.tdRight, fontWeight: 600 }}>{fmt(rp.amount)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Recent Maintenance Requests */}
+          {data.maintenanceSummary.recentRequests.length > 0 && (
+            <div style={s.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div style={s.sectionTitle}>Open Maintenance Requests</div>
+                <Link to="/maintenance" style={{ fontSize: '0.8rem', color: '#4f8ef7', textDecoration: 'none' }}>View All</Link>
+              </div>
               <table style={s.table}>
                 <thead>
                   <tr>
-                    <th style={s.th}>Due Date</th>
+                    <th style={s.th}>Property</th>
+                    <th style={s.th}>Title</th>
+                    <th style={s.th}>Priority</th>
                     <th style={s.th}>Status</th>
-                    <th style={s.thRight}>Amount</th>
+                    <th style={s.th}>Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.upcomingRentPayments.map((rp) => (
-                    <tr key={rp._id}>
-                      <td style={s.td}>{fmtDate(rp.dueDate)}</td>
-                      <td style={s.td}>
-                        {badge(
-                          rp.status,
-                          rp.status === 'Overdue' ? '#991b1b' : '#92400e',
-                          rp.status === 'Overdue' ? '#fee2e2' : '#fef3c7',
-                        )}
-                      </td>
-                      <td style={{ ...s.tdRight, fontWeight: 600 }}>{fmt(rp.amount)}</td>
-                    </tr>
-                  ))}
+                  {data.maintenanceSummary.recentRequests.map((mx: DashboardMaintenanceRequest) => {
+                    const priorityColors: Record<string, [string, string]> = {
+                      Emergency: ['#991b1b', '#fee2e2'],
+                      High: ['#92400e', '#fef3c7'],
+                      Medium: ['#1d4ed8', '#dbeafe'],
+                      Low: ['#065f46', '#d1fae5'],
+                    };
+                    const statusColors: Record<string, [string, string]> = {
+                      Pending: ['#92400e', '#fef3c7'],
+                      'In Progress': ['#1d4ed8', '#dbeafe'],
+                    };
+                    const [pColor, pBg] = priorityColors[mx.priority] ?? ['#6b7280', '#f3f4f6'];
+                    const [sColor, sBg] = statusColors[mx.status] ?? ['#6b7280', '#f3f4f6'];
+                    const propName =
+                      typeof mx.propertyId === 'object' && mx.propertyId !== null
+                        ? mx.propertyId.propertyName
+                        : '—';
+                    return (
+                      <tr key={mx._id} style={mx.priority === 'Emergency' ? { backgroundColor: '#fff5f5' } : {}}>
+                        <td style={s.td}>{propName}</td>
+                        <td style={{ ...s.td, fontWeight: 600 }}>
+                          <Link to={`/maintenance/${mx._id}`} style={{ color: '#1d4ed8', textDecoration: 'none' }}>
+                            {mx.title}
+                          </Link>
+                        </td>
+                        <td style={s.td}>{badge(mx.priority, pColor, pBg)}</td>
+                        <td style={s.td}>{badge(mx.status, sColor, sBg)}</td>
+                        <td style={s.td}>{fmtDate(mx.createdAt)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            )}
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>

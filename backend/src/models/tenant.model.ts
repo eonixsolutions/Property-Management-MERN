@@ -30,6 +30,7 @@ export interface ITenant {
   status: TenantStatus;
   emergencyContact?: IEmergencyContact;
   notes?: string;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,6 +104,8 @@ const tenantSchema = new Schema<ITenant>(
     },
 
     notes: { type: String, trim: true },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

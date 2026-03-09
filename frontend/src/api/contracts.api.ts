@@ -31,10 +31,10 @@ export interface ApiContract {
   leaseEnd?: string;
   monthlyRent?: number;
   securityDeposit?: number;
-  lateFee?: string;
+  lateFee?: number;
   returnPeriod?: string;
   noticePeriod?: string;
-  holdoverRate?: string;
+  holdoverRate?: number;
   petsAllowed: boolean;
   petDeposit?: number;
   utilitiesResponsible?: UtilitiesResponsible;

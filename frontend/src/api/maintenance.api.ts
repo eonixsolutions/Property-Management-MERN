@@ -26,6 +26,7 @@ export interface ListMaintenanceParams {
   page?: number;
   limit?: number;
   propertyId?: string;
+  tenantId?: string;
   status?: MaintenanceStatus;
   priority?: MaintenancePriority;
   search?: string;

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import type { AxiosError } from 'axios';
+import type { ZodError } from 'zod';
 import { maintenanceApi } from '@api/maintenance.api';
+import { maintenanceSchema, editMaintenanceSchema } from '@validations/maintenance.form.schema';
 import type {
   ApiMaintenanceRequest,
   ListMaintenanceParams,
@@ -12,18 +13,22 @@ import type {
 } from '@api/maintenance.api';
 import { propertiesApi } from '@api/properties.api';
 import type { DropdownItem } from '@api/properties.api';
+import { tenantsApi } from '@api/tenants.api';
+import type { TenantDropdownItem } from '@api/tenants.api';
 import type { PaginationMeta } from '@api/users.api';
+import { sh } from '@/styles/shared';
+import { resolveError, zodFieldErrors } from '@utils/formHelpers';
+import type { FieldErrors } from '@utils/formHelpers';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { formatDateLong } from '@utils/formatDate';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = {
+  ...sh,
+  // Page-specific overrides / additions
   page: { padding: '1.5rem', maxWidth: '1100px' },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '1.25rem',
-  },
   title: { fontSize: '1.4rem', fontWeight: 700, color: '#1a1a2e', margin: 0 },
   btn: {
     padding: '0.5rem 1rem',
@@ -41,85 +46,22 @@ const s = {
   },
   btnDanger: { backgroundColor: '#dc2626', color: '#fff' },
   btnSm: { padding: '0.3rem 0.65rem', fontSize: '0.775rem' },
-  filterBar: {
-    display: 'flex',
-    gap: '0.75rem',
-    flexWrap: 'wrap' as const,
-    marginBottom: '1rem',
+  iconBtn: {
+    padding: '0.3rem',
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    borderRadius: '4px',
+    display: 'inline-flex',
     alignItems: 'center',
-  },
-  input: {
-    padding: '0.45rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    fontSize: '0.875rem',
-    minWidth: '160px',
-  },
-  select: {
-    padding: '0.45rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    fontSize: '0.875rem',
-    backgroundColor: '#fff',
-  },
-  table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.875rem' },
-  th: {
-    textAlign: 'left' as const,
-    padding: '0.6rem 0.75rem',
-    backgroundColor: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-    fontWeight: 600,
-    color: '#374151',
-    whiteSpace: 'nowrap' as const,
-  },
-  td: {
-    padding: '0.65rem 0.75rem',
-    borderBottom: '1px solid #f3f4f6',
-    verticalAlign: 'top' as const,
-  },
-  badge: {
-    display: 'inline-block',
-    padding: '0.18rem 0.55rem',
-    borderRadius: '999px',
-    fontSize: '0.72rem',
-    fontWeight: 600,
+    justifyContent: 'center',
+    lineHeight: 1,
   },
   card: {
     backgroundColor: '#fff',
     borderRadius: '8px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
     overflow: 'hidden',
-  },
-  pagination: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
-    marginTop: '1rem',
-    justifyContent: 'flex-end',
-  },
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  modal: {
-    backgroundColor: '#fff',
-    borderRadius: '10px',
-    padding: '1.75rem',
-    width: '560px',
-    maxWidth: '95vw',
-    maxHeight: '90vh',
-    overflowY: 'auto' as const,
-  },
-  modalTitle: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    marginBottom: '1.25rem',
-    color: '#1a1a2e',
   },
   formGrid: {
     display: 'grid',
@@ -128,19 +70,6 @@ const s = {
     marginBottom: '0.9rem',
   },
   formFull: { marginBottom: '0.9rem' },
-  label: {
-    display: 'block',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: '0.3rem',
-  },
-  modalActions: {
-    display: 'flex',
-    gap: '0.75rem',
-    justifyContent: 'flex-end',
-    marginTop: '1.25rem',
-  },
   errText: { color: '#dc2626', fontSize: '0.8rem', marginTop: '0.75rem' },
 };
 
@@ -170,20 +99,12 @@ function StatusBadge({ status }: { status: MaintenanceStatus }) {
   return <span style={{ ...s.badge, backgroundColor: c.bg, color: c.color }}>{status}</span>;
 }
 
-function fmtDate(dateStr?: string) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 // ── Default form ──────────────────────────────────────────────────────────────
 
 interface FormState {
   id?: string;
   propertyId: string;
+  tenantId: string;
   title: string;
   description: string;
   priority: MaintenancePriority;
@@ -195,6 +116,7 @@ interface FormState {
 
 const defaultForm = (): FormState => ({
   propertyId: '',
+  tenantId: '',
   title: '',
   description: '',
   priority: 'Medium',
@@ -220,11 +142,13 @@ export default function MaintenancePage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [propertyOptions, setPropertyOptions] = useState<DropdownItem[]>([]);
+  const [tenantOptions, setTenantOptions] = useState<TenantDropdownItem[]>([]);
 
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [form, setForm] = useState<FormState>(defaultForm());
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -236,6 +160,17 @@ export default function MaintenancePage() {
       .then((items) => setPropertyOptions(items))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!form.propertyId) {
+      setTenantOptions([]);
+      return;
+    }
+    tenantsApi
+      .dropdown({ propertyId: form.propertyId, status: 'Active' })
+      .then(setTenantOptions)
+      .catch(() => setTenantOptions([]));
+  }, [form.propertyId]);
 
   const propertyLabel = (id: string) => propertyOptions.find((o) => o._id === id)?.label ?? id;
 
@@ -275,6 +210,7 @@ export default function MaintenancePage() {
     setForm(defaultForm());
     setModalMode('add');
     setModalError('');
+    setFieldErrors({});
     setShowModal(true);
   }
 
@@ -282,6 +218,7 @@ export default function MaintenancePage() {
     setForm({
       id: r._id,
       propertyId: r.propertyId,
+      tenantId: r.tenantId ?? '',
       title: r.title,
       description: r.description ?? '',
       priority: r.priority,
@@ -292,22 +229,36 @@ export default function MaintenancePage() {
     });
     setModalMode('edit');
     setModalError('');
+    setFieldErrors({});
     setShowModal(true);
   }
 
-  function setF<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function handleFieldChange<K extends keyof FormState>(key: K, value: FormState[K]) {
+    const newForm = { ...form, [key]: value };
+    setForm(newForm);
+    const schema = modalMode === 'add' ? maintenanceSchema : editMaintenanceSchema;
+    const result = schema.safeParse(newForm);
+    if (result.success) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+    } else {
+      const errs = zodFieldErrors(result.error as ZodError);
+      if (errs[key as string]) {
+        setFieldErrors((prev) => ({ ...prev, [key]: errs[key as string] }));
+      } else {
+        setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+      }
+    }
   }
 
   async function handleSave() {
-    if (!form.propertyId) {
-      setModalError('Property is required.');
+    const schema = modalMode === 'add' ? maintenanceSchema : editMaintenanceSchema;
+    const result = schema.safeParse(form);
+    if (!result.success) {
+      setFieldErrors(zodFieldErrors(result.error as ZodError));
+      setModalError(result.error.issues[0]?.message ?? 'Please fix the errors above.');
       return;
     }
-    if (!form.title.trim()) {
-      setModalError('Title is required.');
-      return;
-    }
+    setFieldErrors({});
     setSaving(true);
     setModalError('');
     try {
@@ -318,6 +269,7 @@ export default function MaintenancePage() {
           priority: form.priority,
           status: form.status,
         };
+        if (form.tenantId) payload.tenantId = form.tenantId;
         if (form.description.trim()) payload.description = form.description.trim();
         if (form.cost !== '') payload.cost = Number(form.cost);
         if (form.completedDate) payload.completedDate = new Date(form.completedDate).toISOString();
@@ -340,8 +292,7 @@ export default function MaintenancePage() {
       setShowModal(false);
       load();
     } catch (e) {
-      const err = e as AxiosError<{ message?: string }>;
-      setModalError(err.response?.data?.message ?? 'Save failed. Please try again.');
+      setModalError(resolveError(e));
     } finally {
       setSaving(false);
     }
@@ -374,7 +325,7 @@ export default function MaintenancePage() {
       {/* Filters */}
       <div style={s.filterBar}>
         <select
-          style={s.select}
+          style={s.filterSelect}
           value={filterProperty}
           onChange={(e) => {
             setFilterProperty(e.target.value);
@@ -390,7 +341,7 @@ export default function MaintenancePage() {
         </select>
 
         <select
-          style={s.select}
+          style={s.filterSelect}
           value={filterPriority}
           onChange={(e) => {
             setFilterPriority(e.target.value);
@@ -406,7 +357,7 @@ export default function MaintenancePage() {
         </select>
 
         <select
-          style={s.select}
+          style={s.filterSelect}
           value={filterStatus}
           onChange={(e) => {
             setFilterStatus(e.target.value);
@@ -424,14 +375,14 @@ export default function MaintenancePage() {
         </select>
 
         <input
-          style={s.input}
+          style={s.searchInput}
           placeholder="Search title…"
           defaultValue={search}
           onChange={(e) => handleSearchChange(e.target.value)}
         />
       </div>
 
-      {error && <div style={s.errText}>{error}</div>}
+      {error && <div style={s.errorBanner}>{error}</div>}
 
       {/* Table */}
       <div style={s.card}>
@@ -487,32 +438,40 @@ export default function MaintenancePage() {
                   <td style={s.td}>
                     {r.cost !== null && r.cost !== undefined ? r.cost.toLocaleString() : '—'}
                   </td>
-                  <td style={s.td}>{fmtDate(r.createdAt)}</td>
-                  <td style={s.td}>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <td style={s.td}>{formatDateLong(r.createdAt)}</td>
+                  <td style={{ ...s.td, whiteSpace: 'nowrap' as const }}>
+                    <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
                       <Link
                         to={`/maintenance/${r._id}`}
-                        style={{
-                          ...s.btn,
-                          ...s.btnSecondary,
-                          ...s.btnSm,
-                          textDecoration: 'none',
-                          display: 'inline-block',
-                        }}
+                        title="View details"
+                        style={{ ...s.iconBtn, color: '#6b7280', textDecoration: 'none' }}
                       >
-                        View
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
                       </Link>
                       <button
-                        style={{ ...s.btn, ...s.btnSecondary, ...s.btnSm }}
+                        style={{ ...s.iconBtn, color: '#1d4ed8' }}
+                        title="Edit request"
                         onClick={() => openEdit(r)}
                       >
-                        Edit
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
                       </button>
                       <button
-                        style={{ ...s.btn, ...s.btnDanger, ...s.btnSm }}
+                        style={{ ...s.iconBtn, color: '#be123c' }}
+                        title="Delete request"
                         onClick={() => setDeleteId(r._id)}
                       >
-                        Delete
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
                       </button>
                     </div>
                   </td>
@@ -524,27 +483,7 @@ export default function MaintenancePage() {
       </div>
 
       {/* Pagination */}
-      {meta && meta.totalPages > 1 && (
-        <div style={s.pagination}>
-          <button
-            style={{ ...s.btn, ...s.btnSecondary, ...s.btnSm }}
-            disabled={!meta.hasPrevPage}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            ← Prev
-          </button>
-          <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-            Page {meta.page} of {meta.totalPages}
-          </span>
-          <button
-            style={{ ...s.btn, ...s.btnSecondary, ...s.btnSm }}
-            disabled={!meta.hasNextPage}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next →
-          </button>
-        </div>
-      )}
+      {meta && <Pagination meta={meta} onPageChange={setPage} />}
 
       {/* Add / Edit Modal */}
       {showModal && (
@@ -560,9 +499,11 @@ export default function MaintenancePage() {
             <div style={s.formFull}>
               <label style={s.label}>Property *</label>
               <select
-                style={{ ...s.select, width: '100%' }}
+                style={{ ...s.select, ...(fieldErrors.propertyId ? s.inputError : {}) }}
                 value={form.propertyId}
-                onChange={(e) => setF('propertyId', e.target.value)}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, propertyId: e.target.value, tenantId: '' }));
+                }}
                 disabled={modalMode === 'edit'}
               >
                 <option value="">Select property…</option>
@@ -572,30 +513,48 @@ export default function MaintenancePage() {
                   </option>
                 ))}
               </select>
+              {fieldErrors.propertyId && <div style={s.fieldError}>{fieldErrors.propertyId}</div>}
             </div>
 
             <div style={s.formFull}>
               <label style={s.label}>Title *</label>
               <input
-                style={{ ...s.input, width: '100%', boxSizing: 'border-box' as const }}
+                style={{ ...s.input, ...(fieldErrors.title ? s.inputError : {}) }}
                 value={form.title}
-                onChange={(e) => setF('title', e.target.value)}
+                onChange={(e) => handleFieldChange('title', e.target.value)}
                 placeholder="e.g. Leaking bathroom pipe"
               />
+              {fieldErrors.title && <div style={s.fieldError}>{fieldErrors.title}</div>}
+            </div>
+
+            <div style={s.formFull}>
+              <label style={s.label}>Tenant (optional)</label>
+              <select
+                style={s.select}
+                value={form.tenantId}
+                onChange={(e) => handleFieldChange('tenantId', e.target.value)}
+                disabled={!form.propertyId}
+              >
+                <option value="">
+                  {!form.propertyId ? 'Select a property first…' : tenantOptions.length === 0 ? 'No active tenants for this property' : '— None —'}
+                </option>
+                {tenantOptions.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.firstName} {t.lastName}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div style={s.formFull}>
               <label style={s.label}>Description</label>
               <textarea
                 style={{
-                  ...s.input,
-                  width: '100%',
-                  boxSizing: 'border-box' as const,
+                  ...s.textarea,
                   minHeight: '80px',
-                  resize: 'vertical' as const,
                 }}
                 value={form.description}
-                onChange={(e) => setF('description', e.target.value)}
+                onChange={(e) => handleFieldChange('description', e.target.value)}
                 placeholder="Describe the issue…"
               />
             </div>
@@ -604,9 +563,9 @@ export default function MaintenancePage() {
               <div>
                 <label style={s.label}>Priority</label>
                 <select
-                  style={{ ...s.select, width: '100%' }}
+                  style={s.select}
                   value={form.priority}
-                  onChange={(e) => setF('priority', e.target.value as MaintenancePriority)}
+                  onChange={(e) => handleFieldChange('priority', e.target.value as MaintenancePriority)}
                 >
                   {(['Emergency', 'High', 'Medium', 'Low'] as MaintenancePriority[]).map((p) => (
                     <option key={p} value={p}>
@@ -619,9 +578,9 @@ export default function MaintenancePage() {
               <div>
                 <label style={s.label}>Status</label>
                 <select
-                  style={{ ...s.select, width: '100%' }}
+                  style={s.select}
                   value={form.status}
-                  onChange={(e) => setF('status', e.target.value as MaintenanceStatus)}
+                  onChange={(e) => handleFieldChange('status', e.target.value as MaintenanceStatus)}
                 >
                   {(['Pending', 'In Progress', 'Completed', 'Cancelled'] as MaintenanceStatus[]).map(
                     (st) => (
@@ -638,20 +597,21 @@ export default function MaintenancePage() {
                 <input
                   type="number"
                   min="0"
-                  style={{ ...s.input, width: '100%', boxSizing: 'border-box' as const }}
+                  style={{ ...s.input, ...(fieldErrors.cost ? s.inputError : {}) }}
                   value={form.cost}
-                  onChange={(e) => setF('cost', e.target.value)}
+                  onChange={(e) => handleFieldChange('cost', e.target.value)}
                   placeholder="0.00"
                 />
+                {fieldErrors.cost && <div style={s.fieldError}>{fieldErrors.cost}</div>}
               </div>
 
               <div>
                 <label style={s.label}>Completed Date</label>
                 <input
                   type="date"
-                  style={{ ...s.input, width: '100%', boxSizing: 'border-box' as const }}
+                  style={s.input}
                   value={form.completedDate}
-                  onChange={(e) => setF('completedDate', e.target.value)}
+                  onChange={(e) => handleFieldChange('completedDate', e.target.value)}
                 />
               </div>
             </div>
@@ -659,15 +619,9 @@ export default function MaintenancePage() {
             <div style={s.formFull}>
               <label style={s.label}>Notes</label>
               <textarea
-                style={{
-                  ...s.input,
-                  width: '100%',
-                  boxSizing: 'border-box' as const,
-                  minHeight: '60px',
-                  resize: 'vertical' as const,
-                }}
+                style={s.textarea}
                 value={form.notes}
-                onChange={(e) => setF('notes', e.target.value)}
+                onChange={(e) => handleFieldChange('notes', e.target.value)}
                 placeholder="Additional notes…"
               />
             </div>
@@ -676,14 +630,14 @@ export default function MaintenancePage() {
 
             <div style={s.modalActions}>
               <button
-                style={{ ...s.btn, ...s.btnSecondary }}
+                style={s.cancelBtn}
                 onClick={() => setShowModal(false)}
                 disabled={saving}
               >
                 Cancel
               </button>
               <button
-                style={{ ...s.btn, ...s.btnPrimary }}
+                style={{ ...s.submitBtn, ...(saving ? s.submitBtnDisabled : {}) }}
                 onClick={handleSave}
                 disabled={saving}
               >
@@ -696,35 +650,16 @@ export default function MaintenancePage() {
 
       {/* Delete Confirm */}
       {deleteId && (
-        <div
-          style={s.overlay}
-          onClick={(e) => e.target === e.currentTarget && setDeleteId(null)}
-        >
-          <div style={{ ...s.modal, maxWidth: '420px' }}>
-            <div style={s.modalTitle}>Delete Maintenance Request?</div>
-            <p style={{ color: '#374151', fontSize: '0.9rem' }}>
-              This action cannot be undone.
-            </p>
-            <div style={s.modalActions}>
-              <button
-                style={{ ...s.btn, ...s.btnSecondary }}
-                onClick={() => setDeleteId(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                style={{ ...s.btn, ...s.btnDanger }}
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete Maintenance Request?"
+          message="This action cannot be undone."
+          confirmLabel="Delete"
+          isLoading={deleting}
+          isDanger
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteId(null)}
+        />
       )}
     </div>
   );
 }
-

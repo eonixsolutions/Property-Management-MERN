@@ -50,6 +50,17 @@ export interface UpdateTenantChequeStatusInput {
   notes?: string | null;
 }
 
+export interface UpdateTenantChequeInput {
+  chequeNumber?: string;
+  bankName?: string | null;
+  chequeAmount?: number;
+  chequeDate?: string;
+  depositDate?: string | null;
+  status?: TenantChequeStatus;
+  notes?: string | null;
+  rentPaymentId?: string | null;
+}
+
 // ── Owner Cheque ───────────────────────────────────────────────────────────
 
 export type OwnerChequeStatus = 'Issued' | 'Cleared' | 'Bounced' | 'Cancelled';
@@ -59,6 +70,7 @@ export interface ApiOwnerCheque {
   userId: string;
   propertyId: string;
   ownerPaymentId?: string;
+  ownerName?: string;
   chequeNumber: string;
   bankName?: string;
   chequeAmount: number;
@@ -96,6 +108,17 @@ export interface UpdateOwnerChequeStatusInput {
   notes?: string | null;
 }
 
+export interface UpdateOwnerChequeInput {
+  chequeNumber?: string;
+  bankName?: string | null;
+  chequeAmount?: number;
+  chequeDate?: string;
+  issueDate?: string | null;
+  status?: OwnerChequeStatus;
+  notes?: string | null;
+  ownerPaymentId?: string | null;
+}
+
 export type ChequeBulkMode = 'manual' | 'copy_from';
 export type ChequeBulkFrequency = 'Monthly' | 'Weekly';
 
@@ -130,6 +153,17 @@ export const chequesApi = {
   async createTenant(data: CreateTenantChequeInput): Promise<{ cheque: ApiTenantCheque }> {
     const res = await apiClient.post<{ success: true; data: { cheque: ApiTenantCheque } }>(
       '/cheques/tenant',
+      data,
+    );
+    return res.data.data;
+  },
+
+  async updateTenant(
+    id: string,
+    data: UpdateTenantChequeInput,
+  ): Promise<{ cheque: ApiTenantCheque }> {
+    const res = await apiClient.put<{ success: true; data: { cheque: ApiTenantCheque } }>(
+      `/cheques/tenant/${id}`,
       data,
     );
     return res.data.data;
@@ -179,6 +213,17 @@ export const chequesApi = {
       success: true;
       data: { cheques: ApiOwnerCheque[]; message: string; count: number };
     }>('/cheques/owner/bulk', data);
+    return res.data.data;
+  },
+
+  async updateOwner(
+    id: string,
+    data: UpdateOwnerChequeInput,
+  ): Promise<{ cheque: ApiOwnerCheque }> {
+    const res = await apiClient.put<{ success: true; data: { cheque: ApiOwnerCheque } }>(
+      `/cheques/owner/${id}`,
+      data,
+    );
     return res.data.data;
   },
 

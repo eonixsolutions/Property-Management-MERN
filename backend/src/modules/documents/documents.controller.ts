@@ -32,7 +32,7 @@ export const documentAccessMiddleware: RequestHandler = asyncHandler(async (req,
   const id = req.params['id'] as string;
   validateObjectId(id, 'document ID');
 
-  const doc = await Document.findById(id).lean();
+  const doc = await Document.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
   if (!doc) throw ApiError.notFound('Document');
 
   const { role, id: userId } = req.user!;
@@ -60,7 +60,7 @@ export const listDocuments: RequestHandler = asyncHandler(async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query['limit'] ?? 20)));
   const skip = (page - 1) * limit;
 
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
   // BL-04 data scoping — documents are scoped by userId
   if (role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN) {
@@ -179,15 +179,10 @@ export const downloadDocument: RequestHandler = asyncHandler(async (req, res) =>
 /**
  * DELETE /api/documents/:id
  *
- * Deletes the DB record and the physical file from disk.
+ * Soft-deletes the document record (isDeleted: true). Physical file is preserved.
  */
 export const deleteDocument: RequestHandler = asyncHandler(async (req, res) => {
   const doc = req.documentDoc!;
-
-  // Delete physical file (best-effort — don't fail if file is missing)
-  const absolutePath = path.resolve(doc.filePath);
-  fs.unlink(absolutePath, () => {});
-
-  await Document.findByIdAndDelete(doc._id);
+  await Document.findByIdAndUpdate(doc._id, { $set: { isDeleted: true } });
   return ApiResponse.noContent(res);
 });

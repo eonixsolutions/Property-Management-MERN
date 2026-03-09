@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@context/AuthContext';
 import { NotificationBell } from './NotificationBell';
 
@@ -38,6 +39,7 @@ const styles = {
 
 export function TopBar() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <header style={styles.topBar}>
@@ -48,7 +50,7 @@ export function TopBar() {
             <NotificationBell />
             <span>{user.email ?? 'User'}</span>
             <span style={{ color: '#9ca3af' }}>({user.role})</span>
-            <button style={styles.logoutBtn} onClick={() => void logout()}>
+            <button style={styles.logoutBtn} onClick={() => void logout().then(() => navigate('/'))}>
               Logout
             </button>
           </>

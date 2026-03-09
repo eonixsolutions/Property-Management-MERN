@@ -4,7 +4,6 @@ import { ApiResponse } from '@utils/ApiResponse';
 import { ApiError } from '@utils/ApiError';
 import { asyncHandler } from '@utils/asyncHandler';
 import { UserRole } from '@models/user.model';
-import { User } from '@models/user.model';
 import { Tenant } from '@models/tenant.model';
 import { Property } from '@models/property.model';
 import { Contract } from '@models/contract.model';
@@ -20,7 +19,10 @@ export const contractAccessMiddleware: RequestHandler = asyncHandler(async (req,
   const { id: userId, role } = req.user!;
   const isAdmin = role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
 
-  const contract = await Contract.findById(req.params['id']).lean();
+  const contract = await Contract.findOne({
+    _id: req.params['id'],
+    isDeleted: { $ne: true },
+  }).lean();
   if (!contract) throw ApiError.notFound('Contract not found');
 
   if (!isAdmin && contract.userId.toString() !== userId) {
@@ -41,7 +43,9 @@ export const listContracts: RequestHandler = asyncHandler(async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query['limit']) || 20));
   const skip = (page - 1) * limit;
 
-  const ownerFilter = isAdmin ? {} : { userId: new mongoose.Types.ObjectId(userId) };
+  const ownerFilter = isAdmin
+    ? { isDeleted: { $ne: true } }
+    : { userId: new mongoose.Types.ObjectId(userId), isDeleted: { $ne: true } };
 
   const [contracts, total] = await Promise.all([
     Contract.find(ownerFilter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -59,14 +63,10 @@ export const listContracts: RequestHandler = asyncHandler(async (req, res) => {
  * - Tenant + property info if ?tenantId=X is provided
  */
 export const getContractDefaults: RequestHandler = asyncHandler(async (req, res) => {
-  const { id: userId } = req.user!;
-
-  // Landlord from user record
-  const user = await User.findById(userId).select('email phone').lean();
+  // Landlord info is intentionally not pre-filled from the user record —
+  // the system user may be an admin acting on behalf of different landlords.
 
   const defaults: Record<string, unknown> = {
-    landlordEmail: user?.email ?? '',
-    landlordPhone: user?.phone ?? '',
     landlordName: '',
     governingLaw: 'Qatar',
     utilitiesResponsible: 'Tenant',
@@ -177,6 +177,6 @@ export const updateContract: RequestHandler = asyncHandler(async (req, res) => {
 // ── DELETE /contracts/:id ─────────────────────────────────────────────────
 
 export const deleteContract: RequestHandler = asyncHandler(async (req, res) => {
-  await Contract.findByIdAndDelete(req.contractDoc!._id);
+  await Contract.findByIdAndUpdate(req.contractDoc!._id, { $set: { isDeleted: true } });
   return ApiResponse.ok(res, { message: 'Contract deleted' });
 });

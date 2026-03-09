@@ -38,7 +38,7 @@ export const transactionOwnerMiddleware: RequestHandler = asyncHandler(async (re
   const id = req.params['id'] as string;
   validateObjectId(id, 'transaction ID');
 
-  const transaction = await Transaction.findById(id).lean();
+  const transaction = await Transaction.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
   if (!transaction) {
     throw ApiError.notFound('Transaction');
   }
@@ -81,7 +81,10 @@ export const listTransactions: RequestHandler = asyncHandler(async (req, res) =>
   const skip = (page - 1) * limit;
 
   const { role, id: userId } = req.user!;
-  const filter: Record<string, unknown> = getBaseFilter(role, userId);
+  const filter: Record<string, unknown> = {
+    ...getBaseFilter(role, userId),
+    isDeleted: { $ne: true },
+  };
 
   const typeParam = req.query['type'] as string | undefined;
   if (typeParam === 'Income' || typeParam === 'Expense') {
@@ -197,10 +200,10 @@ export const updateTransaction: RequestHandler = asyncHandler(async (req, res) =
 /**
  * DELETE /api/transactions/:id
  *
- * Hard-deletes the transaction.
+ * Soft-deletes the transaction.
  */
 export const deleteTransaction: RequestHandler = asyncHandler(async (req, res) => {
   const id = req.params['id'] as string;
-  await Transaction.findByIdAndDelete(id);
+  await Transaction.findByIdAndUpdate(id, { $set: { isDeleted: true } });
   return ApiResponse.noContent(res);
 });

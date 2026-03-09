@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { AxiosError } from 'axios';
 import { transactionsApi } from '@api/transactions.api';
+import { transactionSchema } from '@validations/transaction.form.schema';
 import type {
   ApiTransaction,
   TransactionType,
@@ -15,45 +15,19 @@ import { propertiesApi } from '@api/properties.api';
 import type { DropdownItem } from '@api/properties.api';
 import { tenantsApi } from '@api/tenants.api';
 import type { TenantDropdownItem } from '@api/tenants.api';
+import { sh } from '@/styles/shared';
+import { resolveError, zodFieldErrors } from '@utils/formHelpers';
+import type { FieldErrors } from '@utils/formHelpers';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { formatDateLong } from '@utils/formatDate';
+import { formatCurrency } from '@utils/formatCurrency';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = {
-  page: { padding: '1.5rem' },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1.25rem',
-    flexWrap: 'wrap' as const,
-    gap: '0.75rem',
-  },
-  title: { fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e' },
-  addBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  filterBar: {
-    display: 'flex',
-    gap: '0.75rem',
-    marginBottom: '1rem',
-    flexWrap: 'wrap' as const,
-    alignItems: 'center',
-  },
-  filterSelect: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-  },
+  ...sh,
+  // Page-specific styles not covered by shared
   dateInput: {
     padding: '0.45rem 0.65rem',
     border: '1px solid #d1d5db',
@@ -61,24 +35,7 @@ const s = {
     fontSize: '0.875rem',
     color: '#111',
   },
-  searchInput: {
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    minWidth: '200px',
-    color: '#111',
-  },
   filterLabel: { fontSize: '0.78rem', color: '#6b7280', whiteSpace: 'nowrap' as const },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.6rem 0.75rem',
-    fontSize: '0.8rem',
-    marginBottom: '1rem',
-  },
   summaryBar: {
     display: 'flex',
     gap: '1rem',
@@ -90,132 +47,6 @@ const s = {
     borderRadius: '6px',
     fontSize: '0.82rem',
     fontWeight: 600,
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  th: {
-    textAlign: 'left' as const,
-    padding: '0.75rem 1rem',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  td: {
-    padding: '0.75rem 1rem',
-    fontSize: '0.875rem',
-    color: '#374151',
-    borderBottom: '1px solid #f3f4f6',
-    verticalAlign: 'middle' as const,
-  },
-  actionBtn: {
-    padding: '0.25rem 0.6rem',
-    fontSize: '0.78rem',
-    borderRadius: '3px',
-    cursor: 'pointer',
-    border: '1px solid',
-    marginLeft: '0.4rem',
-  },
-  editBtn: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  deleteBtn: { backgroundColor: '#fff1f2', borderColor: '#fecdd3', color: '#be123c' },
-  badge: {
-    display: 'inline-block',
-    padding: '0.15rem 0.5rem',
-    borderRadius: '999px',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-  },
-  pagination: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    marginTop: '1rem',
-    justifyContent: 'flex-end',
-  },
-  pageBtn: {
-    padding: '0.35rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-  },
-  pageBtnDisabled: { opacity: 0.5, cursor: 'not-allowed' as const },
-  pageInfo: { fontSize: '0.8rem', color: '#6b7280' },
-  emptyRow: { textAlign: 'center' as const, color: '#9ca3af', fontSize: '0.875rem' },
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    zIndex: 50,
-    overflowY: 'auto' as const,
-    padding: '2rem 1rem',
-  },
-  modal: {
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    padding: '2rem',
-    width: '560px',
-    maxWidth: '100%',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-    margin: 'auto',
-  },
-  modalTitle: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    color: '#1a1a2e',
-    marginBottom: '1.25rem',
-  },
-  fieldRow: { display: 'flex', gap: '0.75rem' },
-  field: { marginBottom: '0.875rem', flex: 1 },
-  label: {
-    display: 'block',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: '0.3rem',
-  },
-  input: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-  },
-  select: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-    boxSizing: 'border-box' as const,
-  },
-  textarea: {
-    width: '100%',
-    padding: '0.5rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    boxSizing: 'border-box' as const,
-    minHeight: '60px',
-    resize: 'vertical' as const,
   },
   checkboxRow: {
     display: 'flex',
@@ -234,40 +65,10 @@ const s = {
     paddingBottom: '0.35rem',
     borderBottom: '1px solid #f3f4f6',
   },
-  modalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.75rem',
-    marginTop: '1.5rem',
-  },
-  cancelBtn: {
-    padding: '0.5rem 1rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-  },
-  submitBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  submitBtnDisabled: { opacity: 0.7, cursor: 'not-allowed' as const },
-  modalError: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.5rem 0.65rem',
-    fontSize: '0.8rem',
-    marginBottom: '0.875rem',
-  },
+  // Override field to add flex: 1 for use inside fieldRow
+  field: { marginBottom: '0.875rem', flex: 1 } as const,
+  // Modal width override for this page (wider form)
+  modal: { ...sh.modal, width: '560px' } as const,
 } as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -279,34 +80,6 @@ function typeBadgeStyle(type: TransactionType): React.CSSProperties {
       ? { backgroundColor: '#d1fae5', color: '#065f46' }
       : { backgroundColor: '#fee2e2', color: '#991b1b' }),
   };
-}
-
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function formatAmount(n: number): string {
-  return `${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} QAR`;
-}
-
-function resolveError(err: unknown): string {
-  const e = err as AxiosError<{ error?: { code?: string; message?: string } }>;
-  const code = e.response?.data?.error?.code;
-  switch (code) {
-    case 'FORBIDDEN':
-      return e.response?.data?.error?.message ?? 'Permission denied.';
-    case 'NOT_FOUND':
-      return e.response?.data?.error?.message ?? 'Resource not found.';
-    case 'VALIDATION_ERROR':
-      return e.response?.data?.error?.message ?? 'Validation failed. Check your inputs.';
-    default:
-      return 'An unexpected error occurred. Please try again.';
-  }
 }
 
 const PAYMENT_METHODS = [
@@ -426,6 +199,7 @@ export default function TransactionsPage() {
     transaction?: ApiTransaction;
   } | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -492,35 +266,34 @@ export default function TransactionsPage() {
   function closeModal() {
     setModal(null);
     setModalError('');
+    setFieldErrors({});
   }
 
-  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function handleFieldChange<K extends keyof FormState>(key: K, value: FormState[K]) {
+    const newForm = { ...form, [key]: value };
+    setForm(newForm);
+    const result = transactionSchema.safeParse(newForm);
+    if (result.success) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+    } else {
+      const errs = zodFieldErrors(result.error);
+      if (errs[key as string]) {
+        setFieldErrors((prev) => ({ ...prev, [key]: errs[key as string] }));
+      } else {
+        setFieldErrors((prev) => { const next = { ...prev }; delete next[key as string]; return next; });
+      }
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.type) {
-      setModalError('Transaction type is required.');
+    const result = transactionSchema.safeParse(form);
+    if (!result.success) {
+      setFieldErrors(zodFieldErrors(result.error));
+      setModalError(result.error.issues[0]?.message ?? 'Please fix the errors above.');
       return;
     }
-    if (!form.category.trim()) {
-      setModalError('Category is required.');
-      return;
-    }
-    if (!form.amount || Number(form.amount) < 0) {
-      setModalError('Amount is required and must be non-negative.');
-      return;
-    }
-    if (!form.transactionDate) {
-      setModalError('Transaction date is required.');
-      return;
-    }
-    if (form.isRecurring && !form.recurringFrequency) {
-      setModalError('Please select a recurring frequency.');
-      return;
-    }
-
+    setFieldErrors({});
     setModalError('');
     setSaving(true);
     try {
@@ -560,12 +333,11 @@ export default function TransactionsPage() {
   }
 
   // Summary of visible transactions
-  const totalIncome = transactions
-    .filter((t) => t.type === 'Income')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = transactions
-    .filter((t) => t.type === 'Expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const incomeItems = transactions.filter((t) => t.type === 'Income');
+  const expenseItems = transactions.filter((t) => t.type === 'Expense');
+  const totalIncome = incomeItems.reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = expenseItems.reduce((sum, t) => sum + t.amount, 0);
+  const netProfit = totalIncome - totalExpense;
 
   // Category suggestions based on selected type
   const categorySuggestions =
@@ -582,6 +354,79 @@ export default function TransactionsPage() {
         <button style={s.addBtn} type="button" onClick={openAddModal}>
           + Add Transaction
         </button>
+      </div>
+
+      {/* Summary cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '1rem',
+          marginBottom: '1.25rem',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            borderLeft: '4px solid #059669',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.35rem' }}>
+            Total Income
+          </div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#059669' }}>
+            {formatCurrency(totalIncome, 'QAR', 0)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.2rem' }}>
+            {incomeItems.length} transaction{incomeItems.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            borderLeft: '4px solid #dc2626',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.35rem' }}>
+            Total Expenses
+          </div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#dc2626' }}>
+            {formatCurrency(totalExpense, 'QAR', 0)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.2rem' }}>
+            {expenseItems.length} transaction{expenseItems.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            borderLeft: `4px solid ${netProfit >= 0 ? '#1d4ed8' : '#ea580c'}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.35rem' }}>
+            Net Profit
+          </div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: netProfit >= 0 ? '#1d4ed8' : '#ea580c' }}>
+            {netProfit >= 0 ? '' : '−'}{formatCurrency(Math.abs(netProfit), 'QAR', 0)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.2rem' }}>
+            {netProfit >= 0 ? 'Profit' : 'Loss'} on current page
+          </div>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -649,39 +494,6 @@ export default function TransactionsPage() {
 
       {error && <div style={s.errorBanner}>{error}</div>}
 
-      {/* Summary bar */}
-      {!loading && transactions.length > 0 && (
-        <div style={s.summaryBar}>
-          <div
-            style={{
-              ...s.summaryCard,
-              backgroundColor: '#d1fae5',
-              color: '#065f46',
-            }}
-          >
-            Income: {formatAmount(totalIncome)}
-          </div>
-          <div
-            style={{
-              ...s.summaryCard,
-              backgroundColor: '#fee2e2',
-              color: '#991b1b',
-            }}
-          >
-            Expenses: {formatAmount(totalExpense)}
-          </div>
-          <div
-            style={{
-              ...s.summaryCard,
-              backgroundColor: totalIncome - totalExpense >= 0 ? '#eff6ff' : '#fff7ed',
-              color: totalIncome - totalExpense >= 0 ? '#1d4ed8' : '#9a3412',
-            }}
-          >
-            Net: {formatAmount(totalIncome - totalExpense)}
-          </div>
-        </div>
-      )}
-
       {loading ? (
         <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Loading…</p>
       ) : (
@@ -709,7 +521,7 @@ export default function TransactionsPage() {
                 transactions.map((t) => (
                   <tr key={t._id}>
                     <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>
-                      {formatDate(t.transactionDate)}
+                      {formatDateLong(t.transactionDate)}
                     </td>
                     <td style={s.td}>
                       <span style={typeBadgeStyle(t.type)}>{t.type}</span>
@@ -749,25 +561,35 @@ export default function TransactionsPage() {
                       }}
                     >
                       {t.type === 'Expense' ? '−' : '+'}
-                      {formatAmount(t.amount)}
+                      {formatCurrency(t.amount, 'QAR', 0)}
                     </td>
                     <td style={{ ...s.td, fontSize: '0.82rem', color: '#6b7280' }}>
                       {propertyLabel(t.propertyId)}
                     </td>
-                    <td style={s.td}>
+                    <td style={{ ...s.td, whiteSpace: 'nowrap' as const }}>
                       <button
                         style={{ ...s.actionBtn, ...s.editBtn }}
                         type="button"
+                        title="Edit transaction"
                         onClick={() => openEditModal(t)}
                       >
-                        Edit
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
                       </button>
                       <button
                         style={{ ...s.actionBtn, ...s.deleteBtn }}
                         type="button"
+                        title="Delete transaction"
                         onClick={() => setDeleteTarget(t)}
                       >
-                        Delete
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
                       </button>
                     </td>
                   </tr>
@@ -776,29 +598,7 @@ export default function TransactionsPage() {
             </tbody>
           </table>
 
-          {meta && meta.totalPages > 1 && (
-            <div style={s.pagination}>
-              <button
-                style={{ ...s.pageBtn, ...(meta.hasPrevPage ? {} : s.pageBtnDisabled) }}
-                type="button"
-                disabled={!meta.hasPrevPage}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                ← Prev
-              </button>
-              <span style={s.pageInfo}>
-                Page {meta.page} of {meta.totalPages} ({meta.total} total)
-              </span>
-              <button
-                style={{ ...s.pageBtn, ...(meta.hasNextPage ? {} : s.pageBtnDisabled) }}
-                type="button"
-                disabled={!meta.hasNextPage}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next →
-              </button>
-            </div>
-          )}
+          {meta && <Pagination meta={meta} onPageChange={setPage} />}
         </>
       )}
 
@@ -820,18 +620,30 @@ export default function TransactionsPage() {
                   </label>
                   <select
                     id="tx-type"
-                    style={s.select}
+                    style={{ ...s.select, ...(fieldErrors.type ? s.inputError : {}) }}
                     value={form.type}
                     onChange={(e) => {
-                      setField('type', e.target.value as TransactionType);
-                      setField('category', '');
+                      const newType = e.target.value as TransactionType;
+                      setForm((prev) => ({ ...prev, type: newType, category: '' }));
+                      setFieldErrors((prev) => { const next = { ...prev }; delete next.type; delete next.category; return next; });
                     }}
                     disabled={saving}
-                    required
                   >
+                    <option value="">Select type…</option>
                     <option value="Income">Income</option>
                     <option value="Expense">Expense</option>
                   </select>
+                  {fieldErrors.type && <div style={s.fieldError}>{fieldErrors.type}</div>}
+                  {form.type === 'Income' && (
+                    <div style={s.warningBanner}>
+                      For rent income, use the <strong>Rent page</strong> instead. Adding rent here will double-count it in reports.
+                    </div>
+                  )}
+                  {form.type === 'Expense' && (
+                    <div style={s.warningBanner}>
+                      For owner payments, use the <strong>Owners page</strong> instead. Adding them here will double-count in reports.
+                    </div>
+                  )}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="tx-amount">
@@ -839,15 +651,15 @@ export default function TransactionsPage() {
                   </label>
                   <input
                     id="tx-amount"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.amount ? s.inputError : {}) }}
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.amount}
-                    onChange={(e) => setField('amount', e.target.value)}
+                    onChange={(e) => handleFieldChange('amount', e.target.value)}
                     disabled={saving}
-                    required
                   />
+                  {fieldErrors.amount && <div style={s.fieldError}>{fieldErrors.amount}</div>}
                 </div>
               </div>
 
@@ -856,22 +668,21 @@ export default function TransactionsPage() {
                   <label style={s.label} htmlFor="tx-category">
                     Category *
                   </label>
-                  <input
+                  <select
                     id="tx-category"
-                    style={s.input}
-                    type="text"
-                    list="tx-category-list"
+                    style={{ ...s.select, ...(fieldErrors.category ? s.inputError : {}) }}
                     value={form.category}
-                    onChange={(e) => setField('category', e.target.value)}
+                    onChange={(e) => handleFieldChange('category', e.target.value)}
                     disabled={saving}
-                    required
-                    placeholder="Type or choose…"
-                  />
-                  <datalist id="tx-category-list">
+                  >
+                    <option value="">Select category…</option>
                     {categorySuggestions.map((c) => (
-                      <option key={c} value={c} />
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
+                  {fieldErrors.category && <div style={s.fieldError}>{fieldErrors.category}</div>}
                 </div>
                 <div style={s.field}>
                   <label style={s.label} htmlFor="tx-date">
@@ -879,13 +690,13 @@ export default function TransactionsPage() {
                   </label>
                   <input
                     id="tx-date"
-                    style={s.input}
+                    style={{ ...s.input, ...(fieldErrors.transactionDate ? s.inputError : {}) }}
                     type="date"
                     value={form.transactionDate}
-                    onChange={(e) => setField('transactionDate', e.target.value)}
+                    onChange={(e) => handleFieldChange('transactionDate', e.target.value)}
                     disabled={saving}
-                    required
                   />
+                  {fieldErrors.transactionDate && <div style={s.fieldError}>{fieldErrors.transactionDate}</div>}
                 </div>
               </div>
 
@@ -897,7 +708,7 @@ export default function TransactionsPage() {
                   id="tx-desc"
                   style={s.textarea}
                   value={form.description}
-                  onChange={(e) => setField('description', e.target.value)}
+                  onChange={(e) => handleFieldChange('description', e.target.value)}
                   disabled={saving}
                   placeholder="Optional notes about this transaction…"
                 />
@@ -914,7 +725,7 @@ export default function TransactionsPage() {
                     type="text"
                     list="tx-method-list"
                     value={form.paymentMethod}
-                    onChange={(e) => setField('paymentMethod', e.target.value)}
+                    onChange={(e) => handleFieldChange('paymentMethod', e.target.value)}
                     disabled={saving}
                     placeholder="Cash, Cheque…"
                   />
@@ -933,7 +744,7 @@ export default function TransactionsPage() {
                     style={s.input}
                     type="text"
                     value={form.referenceNumber}
-                    onChange={(e) => setField('referenceNumber', e.target.value)}
+                    onChange={(e) => handleFieldChange('referenceNumber', e.target.value)}
                     disabled={saving}
                   />
                 </div>
@@ -950,7 +761,7 @@ export default function TransactionsPage() {
                     id="tx-property"
                     style={s.select}
                     value={form.propertyId}
-                    onChange={(e) => setField('propertyId', e.target.value)}
+                    onChange={(e) => handleFieldChange('propertyId', e.target.value)}
                     disabled={saving}
                   >
                     <option value="">— None —</option>
@@ -969,7 +780,7 @@ export default function TransactionsPage() {
                     id="tx-tenant"
                     style={s.select}
                     value={form.tenantId}
-                    onChange={(e) => setField('tenantId', e.target.value)}
+                    onChange={(e) => handleFieldChange('tenantId', e.target.value)}
                     disabled={saving}
                   >
                     <option value="">— None —</option>
@@ -990,8 +801,8 @@ export default function TransactionsPage() {
                   type="checkbox"
                   checked={form.isRecurring}
                   onChange={(e) => {
-                    setField('isRecurring', e.target.checked);
-                    if (!e.target.checked) setField('recurringFrequency', '');
+                    handleFieldChange('isRecurring', e.target.checked);
+                    if (!e.target.checked) handleFieldChange('recurringFrequency', '');
                   }}
                   disabled={saving}
                 />
@@ -1007,17 +818,17 @@ export default function TransactionsPage() {
                   </label>
                   <select
                     id="tx-freq"
-                    style={s.select}
+                    style={{ ...s.select, ...(fieldErrors.recurringFrequency ? s.inputError : {}) }}
                     value={form.recurringFrequency}
-                    onChange={(e) => setField('recurringFrequency', e.target.value as RecurringFrequency)}
+                    onChange={(e) => handleFieldChange('recurringFrequency', e.target.value as RecurringFrequency)}
                     disabled={saving}
-                    required
                   >
                     <option value="">Select frequency…</option>
                     <option value="Monthly">Monthly</option>
                     <option value="Weekly">Weekly</option>
                     <option value="Yearly">Yearly</option>
                   </select>
+                  {fieldErrors.recurringFrequency && <div style={s.fieldError}>{fieldErrors.recurringFrequency}</div>}
                 </div>
               )}
 
@@ -1044,44 +855,24 @@ export default function TransactionsPage() {
 
       {/* Delete confirm dialog */}
       {deleteTarget && (
-        <div
-          style={s.overlay}
-          onClick={(e) => e.target === e.currentTarget && setDeleteTarget(null)}
-        >
-          <div style={{ ...s.modal, width: '420px', padding: '1.5rem' }}>
-            <h2 style={{ ...s.modalTitle, marginBottom: '0.75rem' }}>Delete Transaction</h2>
-            <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '1.25rem' }}>
+        <ConfirmDialog
+          title="Delete Transaction"
+          message={
+            <>
               Are you sure you want to delete this{' '}
               <strong>
                 {deleteTarget.type} — {deleteTarget.category}
               </strong>{' '}
-              transaction of <strong>{formatAmount(deleteTarget.amount)}</strong>? This action
-              cannot be undone.
-            </p>
-            <div style={s.modalActions}>
-              <button
-                style={s.cancelBtn}
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                style={{
-                  ...s.submitBtn,
-                  backgroundColor: '#dc2626',
-                  ...(deleting ? s.submitBtnDisabled : {}),
-                }}
-                type="button"
-                onClick={() => void handleDelete()}
-                disabled={deleting}
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+              transaction of <strong>{formatCurrency(deleteTarget.amount, 'QAR', 0)}</strong>? This
+              action cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          isLoading={deleting}
+          isDanger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </div>
   );

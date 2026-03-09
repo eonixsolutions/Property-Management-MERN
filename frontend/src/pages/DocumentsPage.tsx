@@ -108,22 +108,26 @@ const s = {
     fontSize: '0.8rem',
   },
   actionBtn: {
-    padding: '0.25rem 0.55rem',
-    border: '1px solid #d1d5db',
+    padding: '0.3rem',
+    border: 'none',
     borderRadius: '4px',
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     cursor: 'pointer',
-    fontSize: '0.78rem',
-    color: '#374151',
+    color: '#4f8ef7',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dangerBtn: {
-    padding: '0.25rem 0.55rem',
-    border: '1px solid #fca5a5',
+    padding: '0.3rem',
+    border: 'none',
     borderRadius: '4px',
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     cursor: 'pointer',
-    fontSize: '0.78rem',
-    color: '#991b1b',
+    color: '#ef4444',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Modal
   overlay: {
@@ -332,6 +336,7 @@ export default function DocumentsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -398,6 +403,23 @@ export default function DocumentsPage() {
       setUploadError(resolveError(err));
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleView(doc: ApiDocument) {
+    // Open window synchronously (within the click handler) to avoid popup blockers
+    const win = window.open('', '_blank');
+    setViewingId(doc._id);
+    try {
+      const res = await apiClient.get<Blob>(`/documents/${doc._id}/download`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: doc.mimeType });
+      const url = URL.createObjectURL(blob);
+      if (win) win.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      if (win) win.close();
+    } finally {
+      setViewingId(null);
     }
   }
 
@@ -536,21 +558,58 @@ export default function DocumentsPage() {
                     })}
                   </td>
                   <td style={s.td}>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      {/* View */}
+                      <button
+                        style={{ ...s.actionBtn, color: '#166534' }}
+                        type="button"
+                        title="View"
+                        disabled={viewingId === doc._id}
+                        onClick={() => void handleView(doc)}
+                      >
+                        {viewingId === doc._id ? (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                            <circle cx="12" cy="12" r="10"/>
+                          </svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        )}
+                      </button>
+                      {/* Download */}
                       <button
                         style={s.actionBtn}
                         type="button"
+                        title="Download"
                         disabled={downloadingId === doc._id}
                         onClick={() => void handleDownload(doc)}
                       >
-                        {downloadingId === doc._id ? '…' : '↓ Download'}
+                        {downloadingId === doc._id ? (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                            <circle cx="12" cy="12" r="10"/>
+                          </svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                          </svg>
+                        )}
                       </button>
                       <button
                         style={s.dangerBtn}
                         type="button"
+                        title="Delete"
                         onClick={() => setDeleteTarget(doc)}
                       >
-                        Delete
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                          <path d="M10 11v6M14 11v6"/>
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                        </svg>
                       </button>
                     </div>
                   </td>

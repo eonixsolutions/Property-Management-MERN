@@ -31,6 +31,7 @@ export interface IOwnerPayment {
   referenceNumber?: string;
   notes?: string;
   status: OwnerPaymentStatus;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +82,8 @@ const ownerPaymentSchema = new Schema<IOwnerPayment>(
       default: 'Pending',
       index: true,
     },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

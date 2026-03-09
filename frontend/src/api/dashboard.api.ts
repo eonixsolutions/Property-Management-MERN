@@ -11,18 +11,23 @@ export interface DashboardPropertyStats {
   underMaintenance: number;
   occupancyRate: number;
   totalPropertyValue: number;
+  vacantUnitsCount: number;
+  vacantUnitsValue: number;
 }
 
 export interface DashboardFinancialSummary {
   currentMonthIncome: number;
   currentMonthExpenses: number;
   currentMonthNet: number;
+  cashOnCashReturn: number;
 }
 
 export interface DashboardRentStatus {
   activeTenants: number;
   overdueCount: number;
   overdueAmount: number;
+  overdueOwnerCount: number;
+  overdueOwnerAmount: number;
   upcomingAmount: number;
   thisMonthReceived: number;
 }
@@ -46,22 +51,37 @@ export interface DashboardRecentTransaction {
   amount: number;
   description?: string;
   transactionDate: string;
+  propertyId?: { _id: string; propertyName: string } | string | null;
 }
 
 export interface DashboardUpcomingRentPayment {
   _id: string;
-  tenantId: string;
-  propertyId: string;
+  tenantId: { _id: string; firstName: string; lastName: string } | string;
+  propertyId: { _id: string; propertyName: string } | string;
   amount: number;
   dueDate: string;
   status: 'Pending' | 'Overdue';
+}
+
+export interface DashboardMaintenanceRequest {
+  _id: string;
+  title: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Emergency';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
+  propertyId: { _id: string; propertyName: string } | string;
+  createdAt: string;
+}
+
+export interface DashboardMaintenanceSummary {
+  pendingCount: number;
+  recentRequests: DashboardMaintenanceRequest[];
 }
 
 export interface DashboardData {
   propertyStats: DashboardPropertyStats;
   financialSummary: DashboardFinancialSummary;
   rentStatus: DashboardRentStatus;
-  maintenanceSummary: { pendingCount: number };
+  maintenanceSummary: DashboardMaintenanceSummary;
   cashflow: DashboardCashflowItem[];
   recentTransactions: DashboardRecentTransaction[];
   upcomingRentPayments: DashboardUpcomingRentPayment[];

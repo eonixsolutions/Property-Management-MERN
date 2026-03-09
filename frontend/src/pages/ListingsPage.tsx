@@ -495,10 +495,15 @@ export default function ListingsPage() {
     <div style={s.page}>
       {/* Navbar */}
       <nav style={s.navbar}>
-        <span style={s.navBrand}>Property Management</span>
-        <a href="/login" style={s.navLogin}>
-          Admin Login
-        </a>
+        <a href="/" style={s.navBrand}>Property Management</a>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <a href="/" style={{ ...s.navLogin, backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff' }}>
+            Home
+          </a>
+          <a href="/login" style={s.navLogin}>
+            Login
+          </a>
+        </div>
       </nav>
 
       {/* Hero & Search */}

@@ -12,7 +12,7 @@ async function seedProperties() {
     await Property.deleteMany({});
 
     // 🔴 Replace with real user _id
-    const user1 = new mongoose.Types.ObjectId("PUT_USER1_ID_HERE");
+    const user1 = new mongoose.Types.ObjectId('PUT_USER1_ID_HERE');
 
     // Create fixed ObjectIds to maintain relationships
     const property1 = new mongoose.Types.ObjectId();

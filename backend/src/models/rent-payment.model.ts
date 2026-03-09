@@ -29,6 +29,7 @@ export interface IRentPayment {
   status: RentPaymentStatus;
   referenceNumber?: string;
   notes?: string;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,6 +89,8 @@ const rentPaymentSchema = new Schema<IRentPayment>(
     referenceNumber: { type: String, trim: true },
 
     notes: { type: String, trim: true },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

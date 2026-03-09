@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -92,6 +92,32 @@ const styles = {
 export function AppLayout() {
   const { logout } = useAuth();
   const [showIdleWarning, setShowIdleWarning] = useState(false);
+
+  // Prefetch all page chunks in the background after layout mounts.
+  // By the time the user clicks a nav link the chunk is already cached — no loading flash.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void import('@pages/PropertiesPage');
+      void import('@pages/PropertyDetailPage');
+      void import('@pages/TenantsPage');
+      void import('@pages/TenantDetailPage');
+      void import('@pages/RentPage');
+      void import('@pages/TransactionsPage');
+      void import('@pages/OwnersPage');
+      void import('@pages/ChequesPage');
+      void import('@pages/MaintenancePage');
+      void import('@pages/MaintenanceDetailPage');
+      void import('@pages/DocumentsPage');
+      void import('@pages/ContractsPage');
+      void import('@pages/ReportsPage');
+      void import('@pages/AccountingPage');
+      void import('@pages/UsersPage');
+      void import('@pages/UserProfilePage');
+      void import('@pages/NotificationsPage');
+      void import('@pages/SettingsPage');
+    }, 1500); // wait 1.5s so initial render + dashboard data fetch aren't competing
+    return () => clearTimeout(timer);
+  }, []);
 
   const { reset } = useIdleTimer({
     onWarn: () => setShowIdleWarning(true),

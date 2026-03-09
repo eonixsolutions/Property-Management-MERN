@@ -58,12 +58,17 @@ async function buildScopes(
   propFilter: Record<string, unknown>;
   propertyIds: mongoose.Types.ObjectId[];
 }> {
-  const propFilter = isAdmin ? {} : { userId: uid };
+  const isDeletedFilter = { isDeleted: { $ne: true } };
+  const propFilter = isAdmin ? { ...isDeletedFilter } : { userId: uid, ...isDeletedFilter };
   const properties = await Property.find(propFilter).select('_id currentValue').lean();
   const propertyIds = properties.map((p) => p._id as mongoose.Types.ObjectId);
-  const txFilter = isAdmin ? {} : { userId: uid };
-  const rpFilter = isAdmin ? {} : { propertyId: { $in: propertyIds } };
-  const opFilter = isAdmin ? {} : { propertyId: { $in: propertyIds } };
+  const txFilter = isAdmin ? { ...isDeletedFilter } : { userId: uid, ...isDeletedFilter };
+  const rpFilter = isAdmin
+    ? { ...isDeletedFilter }
+    : { propertyId: { $in: propertyIds }, ...isDeletedFilter };
+  const opFilter = isAdmin
+    ? { ...isDeletedFilter }
+    : { propertyId: { $in: propertyIds }, ...isDeletedFilter };
   return { txFilter, rpFilter, opFilter, propFilter, propertyIds };
 }
 

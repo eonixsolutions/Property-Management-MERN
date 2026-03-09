@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 import { contractsApi } from '@api/contracts.api';
+import { PROPERTY_TYPES } from '@api/properties.api';
 import type {
   ApiContract,
   ContractFormData,
@@ -10,6 +12,10 @@ import type {
 import type { PaginationMeta } from '@api/users.api';
 import { tenantsApi } from '@api/tenants.api';
 import type { TenantDropdownItem } from '@api/tenants.api';
+import { sh } from '@/styles/shared';
+import { Pagination } from '@components/common/Pagination';
+import { ConfirmDialog } from '@components/common/ConfirmDialog';
+import { formatDateLong } from '@utils/formatDate';
 
 // ── Default terms text ─────────────────────────────────────────────────────────
 
@@ -142,7 +148,7 @@ ${fmt('Name', c.propertyName)}${fmt('Address', c.propertyAddress)}${fmt('City', 
 </div>
 <h2>LEASE TERMS</h2>
 <div class="g2">
-${fmt('Lease Start', fmtDate(c.leaseStart))}${fmt('Lease End', fmtDate(c.leaseEnd))}${fmt('Monthly Rent', fmtMoney(c.monthlyRent))}${fmt('Security Deposit', fmtMoney(c.securityDeposit))}${fmt('Late Fee', c.lateFee)}${fmt('Return Period', c.returnPeriod)}${fmt('Notice Period', c.noticePeriod)}${fmt('Holdover Rate', c.holdoverRate)}${fmt('Pets Allowed', c.petsAllowed ? 'Yes' : 'No')}${c.petsAllowed ? fmt('Pet Deposit', fmtMoney(c.petDeposit)) : ''}${fmt('Utilities Responsible', c.utilitiesResponsible)}${fmt('Governing Law', c.governingLaw)}
+${fmt('Lease Start', fmtDate(c.leaseStart))}${fmt('Lease End', fmtDate(c.leaseEnd))}${fmt('Monthly Rent', fmtMoney(c.monthlyRent))}${fmt('Security Deposit', fmtMoney(c.securityDeposit))}${fmt('Late Fee', fmtMoney(c.lateFee))}${fmt('Return Period', c.returnPeriod)}${fmt('Notice Period', c.noticePeriod)}${fmt('Holdover Rate', fmtMoney(c.holdoverRate))}${fmt('Pets Allowed', c.petsAllowed ? 'Yes' : 'No')}${c.petsAllowed ? fmt('Pet Deposit', fmtMoney(c.petDeposit)) : ''}${fmt('Utilities Responsible', c.utilitiesResponsible)}${fmt('Governing Law', c.governingLaw)}
 </div>
 <h2>TERMS AND CONDITIONS</h2>
 ${termsHtml}
@@ -160,75 +166,8 @@ ${fmt('Name', c.emergencyContactName)}${fmt('Phone', c.emergencyContactPhone)}
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const s = {
-  page: { padding: '1.5rem' },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1.25rem',
-  },
-  title: { fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e' },
-  addBtn: {
-    padding: '0.5rem 1rem',
-    backgroundColor: '#4f8ef7',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    color: '#991b1b',
-    borderRadius: '4px',
-    padding: '0.6rem 0.75rem',
-    fontSize: '0.8rem',
-    marginBottom: '1rem',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  th: {
-    textAlign: 'left' as const,
-    padding: '0.75rem 1rem',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-  },
-  td: {
-    padding: '0.75rem 1rem',
-    fontSize: '0.875rem',
-    color: '#111',
-    borderBottom: '1px solid #f3f4f6',
-  },
-  actionBtn: {
-    padding: '0.3rem 0.6rem',
-    fontSize: '0.75rem',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    marginRight: '0.35rem',
-  },
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: '2rem 1rem',
-    overflowY: 'auto' as const,
-  },
+  ...sh,
+  // Page-specific: wide overlay panel for the contract form
   overlayBox: {
     width: '100%',
     maxWidth: '860px',
@@ -252,6 +191,14 @@ const s = {
   },
   overlayTitle: { fontSize: '1.1rem', fontWeight: 700, color: '#1a1a2e' },
   overlayBody: { flex: 1, padding: '1.5rem' },
+  overlayFooter: {
+    display: 'flex',
+    gap: '0.75rem',
+    padding: '1rem 1.5rem',
+    borderTop: '1px solid #e5e7eb',
+    justifyContent: 'flex-end',
+    backgroundColor: '#f9fafb',
+  },
   section: { marginBottom: '1.5rem' },
   sectionTitle: {
     fontSize: '0.75rem',
@@ -268,6 +215,38 @@ const s = {
     gridTemplateColumns: '1fr 1fr',
     gap: '0.75rem',
   },
+  checkRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.4rem 0',
+  },
+  // SVG icon button (view/edit/print/delete in table rows)
+  svgBtn: {
+    padding: '0.3rem',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    border: 'none',
+    background: 'none',
+    marginLeft: '0.25rem',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewBtnColor: { color: '#166534' },
+  editBtnColor: { color: '#1d4ed8' },
+  printBtnColor: { color: '#0369a1' },
+  deleteBtnColor: { color: '#dc2626' },
+  // Inline-styled action button used in overlayHeader / overlayFooter
+  actionBtn: {
+    padding: '0.3rem 0.6rem',
+    fontSize: '0.75rem',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginRight: '0.35rem',
+  },
+  // Override label to match the tighter overlay form style
   label: {
     display: 'block',
     fontSize: '0.75rem',
@@ -275,6 +254,7 @@ const s = {
     color: '#4b5563',
     marginBottom: '0.25rem',
   },
+  // Override input/select/textarea padding to match overlay form style
   input: {
     width: '100%',
     padding: '0.45rem 0.65rem',
@@ -282,6 +262,16 @@ const s = {
     borderRadius: '4px',
     fontSize: '0.875rem',
     color: '#111',
+    boxSizing: 'border-box' as const,
+  },
+  select: {
+    width: '100%',
+    padding: '0.45rem 0.65rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '4px',
+    fontSize: '0.875rem',
+    color: '#111',
+    backgroundColor: '#fff',
     boxSizing: 'border-box' as const,
   },
   textarea: {
@@ -297,62 +287,13 @@ const s = {
     fontFamily: 'inherit',
     marginBottom: '0.75rem',
   },
-  select: {
-    width: '100%',
-    padding: '0.45rem 0.65rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#111',
-    backgroundColor: '#fff',
-    boxSizing: 'border-box' as const,
+  fieldError: {
+    display: 'block',
+    color: '#ef4444',
+    fontSize: '0.72rem',
+    marginTop: '0.2rem',
   },
-  checkRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.4rem 0',
-  },
-  overlayFooter: {
-    display: 'flex',
-    gap: '0.75rem',
-    padding: '1rem 1.5rem',
-    borderTop: '1px solid #e5e7eb',
-    justifyContent: 'flex-end',
-    backgroundColor: '#f9fafb',
-  },
-  dialog: {
-    position: 'fixed' as const,
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1100,
-  },
-  dialogBox: {
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    padding: '1.5rem',
-    maxWidth: '380px',
-    width: '90%',
-    boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-  },
-  pagination: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: '1rem',
-  },
-  pageBtn: {
-    padding: '0.4rem 0.8rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
-    fontSize: '0.8rem',
-    cursor: 'pointer',
-    backgroundColor: '#fff',
-  },
+  inputError: { borderColor: '#ef4444' },
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -376,9 +317,13 @@ export default function ContractsPage() {
   const [form, setForm] = useState<ContractFormData>(blankForm());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof ContractFormData, string>>>({});
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [tenants, setTenants] = useState<TenantDropdownItem[]>([]);
+
+  // URL params — read once at render time (before effects, before openCreate)
+  const [searchParams] = useSearchParams();
 
   // Load tenants dropdown once
   useEffect(() => {
@@ -404,42 +349,133 @@ export default function ContractsPage() {
     void load();
   }, [load]);
 
-  // Open create modal — pre-fill landlord defaults
-  const openCreate = async () => {
+  // Open create modal — pre-fill landlord defaults, optionally also tenant data
+  const openCreate = useCallback(async (prefillTenantId?: string) => {
     let f = blankForm();
     try {
-      const defaults = await contractsApi.getDefaults();
+      const defaults = await contractsApi.getDefaults(prefillTenantId);
       f = mergeDefaults(f, defaults);
     } catch {
       // continue without defaults
     }
     setForm(f);
     setFormError('');
+    setFormErrors({});
     setEditingId(null);
     setModalMode('create');
-  };
+  }, []);
+
+  // Auto-open create form when navigated from TenantDetailPage with ?create=1&tenantId=X
+  const autoOpenDone = useRef(false);
+  useEffect(() => {
+    if (autoOpenDone.current) return;
+    if (searchParams.get('create') !== '1') return;
+    autoOpenDone.current = true;
+    const tenantId = searchParams.get('tenantId') ?? undefined;
+    void openCreate(tenantId);
+  }, [searchParams, openCreate]);
 
   // Open edit modal
   const openEdit = (c: ApiContract) => {
     const { _id: _d, userId: _u, createdAt: _ca, updatedAt: _ua, ...rest } = c;
     setForm(rest);
     setFormError('');
+    setFormErrors({});
     setEditingId(c._id);
     setModalMode('edit');
   };
 
-  // Generic field change handler
+  // Field-level validation — returns an error string or ''
+  function validateField(name: keyof ContractFormData, val: unknown, currentForm: ContractFormData): string {
+    switch (name) {
+      case 'landlordName': {
+        const v = String(val ?? '').trim();
+        if (!v) return 'Landlord name is required';
+        if (v.length < 2) return 'Must be at least 2 characters';
+        if (/\d/.test(v)) return 'Name must not contain numbers';
+        return '';
+      }
+      case 'tenantName': {
+        const v = String(val ?? '').trim();
+        if (!v) return 'Tenant name is required';
+        if (v.length < 2) return 'Must be at least 2 characters';
+        if (/\d/.test(v)) return 'Name must not contain numbers';
+        return '';
+      }
+      case 'emergencyContactName': {
+        const v = String(val ?? '').trim();
+        if (!v) return ''; // optional field — only validate when filled
+        if (v.length < 2) return 'Must be at least 2 characters';
+        if (/\d/.test(v)) return 'Name must not contain numbers';
+        return '';
+      }
+      case 'landlordPhone':
+      case 'tenantPhone':
+      case 'tenantAlternatePhone':
+      case 'emergencyContactPhone': {
+        const v = String(val ?? '').trim();
+        if (!v) return ''; // all optional
+        if (v.length < 7) return 'Phone number is too short (min 7 digits)';
+        if (v.length > 20) return 'Phone number is too long (max 20 characters)';
+        if (/[a-zA-Z]/.test(v)) return 'Phone number must not contain letters';
+        return '';
+      }
+      case 'landlordEmail':
+      case 'tenantEmail': {
+        const v = String(val ?? '').trim();
+        if (!v) return ''; // optional
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Invalid email address';
+        return '';
+      }
+      case 'agreementDate':
+        return !val ? 'Agreement date is required' : '';
+      case 'propertyName':
+        return !String(val ?? '').trim() ? 'Property name is required' : '';
+      case 'leaseStart':
+        return !val ? 'Lease start date is required' : '';
+      case 'leaseEnd': {
+        if (!val) return 'Lease end date is required';
+        const start = currentForm.leaseStart;
+        if (start && String(val) <= start) return 'Must be after lease start date';
+        return '';
+      }
+      case 'monthlyRent': {
+        if (val === undefined || val === null || val === '') return 'Monthly rent is required';
+        if (Number(val) <= 0) return 'Must be greater than 0';
+        return '';
+      }
+      default:
+        return '';
+    }
+  }
+
+  // Generic field change handler with real-time validation
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value, type } = e.target;
+    const fieldName = name as keyof ContractFormData;
+    let newVal: unknown;
     if (type === 'checkbox') {
-      setForm((prev) => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
+      newVal = (e.target as HTMLInputElement).checked;
     } else if (type === 'number') {
-      setForm((prev) => ({ ...prev, [name]: value === '' ? undefined : Number(value) }));
+      newVal = value === '' ? undefined : Number(value);
     } else {
-      setForm((prev) => ({ ...prev, [name]: value || undefined }));
+      newVal = value || undefined;
     }
+    const newForm = { ...form, [fieldName]: newVal } as ContractFormData;
+    setForm(newForm);
+    setFormErrors((prev) => {
+      const next = { ...prev };
+      const err = validateField(fieldName, newVal, newForm);
+      if (err) next[fieldName] = err; else delete next[fieldName];
+      // Re-validate leaseEnd when leaseStart changes (cross-field dependency)
+      if (fieldName === 'leaseStart') {
+        const leaseEndErr = validateField('leaseEnd', newForm.leaseEnd, newForm);
+        if (leaseEndErr) next.leaseEnd = leaseEndErr; else delete next.leaseEnd;
+      }
+      return next;
+    });
   };
 
   // Select a tenant to auto-fill form fields
@@ -452,6 +488,9 @@ export default function ContractsPage() {
     try {
       const defaults = await contractsApi.getDefaults(tenantId);
       setForm((prev) => mergeDefaults(prev, defaults));
+      if (defaults.tenantName?.trim()) {
+        setFormErrors((prev) => { const next = { ...prev }; delete next.tenantName; return next; });
+      }
     } catch {
       // ignore
     }
@@ -464,6 +503,19 @@ export default function ContractsPage() {
 
   // Save (create or update)
   const handleSave = async () => {
+    // Validate all required fields and surface errors inline
+    const required: (keyof ContractFormData)[] = [
+      'agreementDate', 'landlordName', 'tenantName', 'propertyName', 'leaseStart', 'leaseEnd', 'monthlyRent',
+    ];
+    const newErrors: Partial<Record<keyof ContractFormData, string>> = {};
+    for (const field of required) {
+      const err = validateField(field, form[field], form);
+      if (err) newErrors[field] = err;
+    }
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, ...newErrors }));
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
@@ -494,6 +546,15 @@ export default function ContractsPage() {
     }
   };
 
+  // View: open contract HTML in a new window without triggering print
+  const handleView = (c: ApiContract) => {
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) return;
+    win.document.write(buildPrintHtml(c));
+    win.document.close();
+    win.focus();
+  };
+
   // Print: open a new browser window with the full contract HTML
   const handlePrint = (c: ApiContract) => {
     const win = window.open('', '_blank', 'width=900,height=700');
@@ -506,46 +567,88 @@ export default function ContractsPage() {
 
   // ── Form field helpers ────────────────────────────────────────────────────────
 
-  const fldStr = (label: string, name: keyof ContractFormData) => (
-    <label key={name}>
-      <span style={s.label}>{label}</span>
-      <input
-        style={s.input}
-        name={name}
-        value={(form[name] as string | undefined) ?? ''}
-        onChange={handleChange}
-      />
-    </label>
-  );
+  // Renders a label with an optional red * for required fields
+  const renderLabel = (label: string) => {
+    const isReq = label.endsWith(' *');
+    const text = isReq ? label.slice(0, -2) : label;
+    return (
+      <span style={s.label}>
+        {text}{isReq && <span style={{ color: '#ef4444' }}> *</span>}
+      </span>
+    );
+  };
 
-  const fldNum = (label: string, name: keyof ContractFormData) => (
-    <label key={name}>
-      <span style={s.label}>{label}</span>
-      <input
-        style={s.input}
-        type="number"
-        name={name}
-        min={0}
-        value={(form[name] as number | undefined) ?? ''}
-        onChange={handleChange}
-      />
-    </label>
-  );
+  const fldStr = (label: string, name: keyof ContractFormData) => {
+    const err = formErrors[name];
+    return (
+      <label key={name} style={{ display: 'block' }}>
+        {renderLabel(label)}
+        <input
+          style={{ ...s.input, ...(err ? s.inputError : {}) }}
+          name={name}
+          value={(form[name] as string | undefined) ?? ''}
+          onChange={handleChange}
+        />
+        {err && <span style={s.fieldError}>{err}</span>}
+      </label>
+    );
+  };
 
-  const fldDate = (label: string, name: keyof ContractFormData) => (
-    <label key={name}>
-      <span style={s.label}>{label}</span>
-      <input
-        style={s.input}
-        type="date"
-        name={name}
-        value={(form[name] as string | undefined) ?? ''}
-        onChange={handleChange}
-      />
-    </label>
-  );
+  const fldNum = (label: string, name: keyof ContractFormData) => {
+    const err = formErrors[name];
+    return (
+      <label key={name} style={{ display: 'block' }}>
+        {renderLabel(label)}
+        <input
+          style={{ ...s.input, ...(err ? s.inputError : {}) }}
+          type="number"
+          name={name}
+          min={0}
+          value={(form[name] as number | undefined) ?? ''}
+          onChange={handleChange}
+        />
+        {err && <span style={s.fieldError}>{err}</span>}
+      </label>
+    );
+  };
 
-  const fldTextarea = (label: string, name: keyof ContractFormData) => (
+  const fldDate = (label: string, name: keyof ContractFormData) => {
+    const err = formErrors[name];
+    return (
+      <label key={name} style={{ display: 'block' }}>
+        {renderLabel(label)}
+        <input
+          style={{ ...s.input, ...(err ? s.inputError : {}) }}
+          type="date"
+          name={name}
+          value={(form[name] as string | undefined) ?? ''}
+          onChange={handleChange}
+        />
+        {err && <span style={s.fieldError}>{err}</span>}
+      </label>
+    );
+  };
+
+  const fldSelect = (label: string, name: keyof ContractFormData, options: readonly string[]) => {
+    const err = formErrors[name];
+    return (
+      <label key={name} style={{ display: 'block' }}>
+        {renderLabel(label)}
+        <select
+          style={{ ...s.select, ...(err ? s.inputError : {}) }}
+          name={name}
+          value={(form[name] as string | undefined) ?? ''}
+          onChange={handleChange}
+        >
+          <option value="">— Select —</option>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        {err && <span style={s.fieldError}>{err}</span>}
+      </label>
+    );
+  };
+
+const fldTextarea = (label: string, name: keyof ContractFormData) => (
     <div key={name}>
       <label style={s.label}>{label}</label>
       <textarea
@@ -560,7 +663,6 @@ export default function ContractsPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString('en-GB') : '–');
   const fmtMoney = (n?: number) => (n !== undefined ? `QAR ${n.toLocaleString()}` : '–');
 
   return (
@@ -568,7 +670,7 @@ export default function ContractsPage() {
       {/* Header */}
       <div style={s.header}>
         <h1 style={s.title}>Contracts</h1>
-        <button style={s.addBtn} onClick={() => void openCreate()}>
+        <button style={s.addBtn} onClick={() => void openCreate(undefined)}>
           + New Contract
         </button>
       </div>
@@ -602,28 +704,53 @@ export default function ContractsPage() {
                 <td style={s.td}>{c.propertyName ?? '–'}</td>
                 <td style={s.td}>
                   {c.leaseStart ?? c.leaseEnd
-                    ? `${fmtDate(c.leaseStart)} – ${fmtDate(c.leaseEnd)}`
+                    ? `${formatDateLong(c.leaseStart)} – ${formatDateLong(c.leaseEnd)}`
                     : '–'}
                 </td>
                 <td style={s.td}>{fmtMoney(c.monthlyRent)}</td>
                 <td style={s.td}>
                   <button
-                    style={{ ...s.actionBtn, backgroundColor: '#3b82f6', color: '#fff' }}
+                    style={{ ...s.svgBtn, ...s.viewBtnColor }}
+                    title="View contract"
+                    onClick={() => handleView(c)}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                  <button
+                    style={{ ...s.svgBtn, ...s.editBtnColor }}
+                    title="Edit contract"
                     onClick={() => openEdit(c)}
                   >
-                    Edit
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
                   </button>
                   <button
-                    style={{ ...s.actionBtn, backgroundColor: '#10b981', color: '#fff' }}
+                    style={{ ...s.svgBtn, ...s.printBtnColor }}
+                    title="Print contract"
                     onClick={() => handlePrint(c)}
                   >
-                    Print
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 6 2 18 2 18 9" />
+                      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                      <rect x="6" y="14" width="12" height="8" />
+                    </svg>
                   </button>
                   <button
-                    style={{ ...s.actionBtn, backgroundColor: '#ef4444', color: '#fff' }}
+                    style={{ ...s.svgBtn, ...s.deleteBtnColor }}
+                    title="Delete contract"
                     onClick={() => setDeleteId(c._id)}
                   >
-                    Delete
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
                   </button>
                 </td>
               </tr>
@@ -633,27 +760,7 @@ export default function ContractsPage() {
       )}
 
       {/* Pagination */}
-      {meta.totalPages > 1 && (
-        <div style={s.pagination}>
-          <button
-            style={s.pageBtn}
-            disabled={!meta.hasPrevPage}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            ← Prev
-          </button>
-          <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-            Page {page} of {meta.totalPages}
-          </span>
-          <button
-            style={s.pageBtn}
-            disabled={!meta.hasNextPage}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next →
-          </button>
-        </div>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} />
 
       {/* Create / Edit overlay */}
       {modalMode !== null && (
@@ -705,19 +812,18 @@ export default function ContractsPage() {
 
             {/* Form body */}
             <div style={s.overlayBody}>
-              {formError && <div style={s.errorBanner}>{formError}</div>}
 
               {/* Agreement Info */}
               <div style={s.section}>
                 <div style={s.sectionTitle}>Agreement Info</div>
-                <div style={{ maxWidth: '260px' }}>{fldDate('Agreement Date', 'agreementDate')}</div>
+                <div style={{ maxWidth: '260px' }}>{fldDate('Agreement Date *', 'agreementDate')}</div>
               </div>
 
               {/* Landlord */}
               <div style={s.section}>
                 <div style={s.sectionTitle}>Landlord</div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldStr('Name', 'landlordName')}
+                  {fldStr('Name *', 'landlordName')}
                   {fldStr('Phone', 'landlordPhone')}
                 </div>
                 <div style={s.grid2}>
@@ -747,7 +853,7 @@ export default function ContractsPage() {
                   </label>
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldStr('Full Name', 'tenantName')}
+                  {fldStr('Full Name *', 'tenantName')}
                   {fldStr('Phone', 'tenantPhone')}
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
@@ -761,7 +867,7 @@ export default function ContractsPage() {
               <div style={s.section}>
                 <div style={s.sectionTitle}>Property</div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldStr('Property Name', 'propertyName')}
+                  {fldStr('Property Name *', 'propertyName')}
                   {fldStr('Address', 'propertyAddress')}
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
@@ -770,7 +876,7 @@ export default function ContractsPage() {
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
                   {fldStr('Zip Code', 'propertyZip')}
-                  {fldStr('Property Type', 'propertyType')}
+                  {fldSelect('Property Type', 'propertyType', PROPERTY_TYPES)}
                 </div>
                 <div style={s.grid2}>
                   {fldNum('Bedrooms', 'propertyBedrooms')}
@@ -785,20 +891,33 @@ export default function ContractsPage() {
               <div style={s.section}>
                 <div style={s.sectionTitle}>Lease Terms</div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldDate('Lease Start', 'leaseStart')}
-                  {fldDate('Lease End', 'leaseEnd')}
+                  {fldDate('Lease Start *', 'leaseStart')}
+                  {fldDate('Lease End *', 'leaseEnd')}
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldNum('Monthly Rent (QAR)', 'monthlyRent')}
+                  {fldNum('Monthly Rent (QAR) *', 'monthlyRent')}
                   {fldNum('Security Deposit (QAR)', 'securityDeposit')}
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldStr('Late Fee', 'lateFee')}
-                  {fldStr('Return Period', 'returnPeriod')}
+                  {fldNum('Late Fee (QAR)', 'lateFee')}
+                  {fldSelect('Return Period', 'returnPeriod', [
+                    '14 days',
+                    '30 days',
+                    '45 days',
+                    '60 days',
+                    '90 days',
+                  ])}
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
-                  {fldStr('Notice Period', 'noticePeriod')}
-                  {fldStr('Holdover Rate', 'holdoverRate')}
+                  {fldSelect('Notice Period', 'noticePeriod', [
+                    '30 days',
+                    '60 days',
+                    '90 days',
+                    '1 month',
+                    '2 months',
+                    '3 months',
+                  ])}
+                  {fldNum('Holdover Rate (QAR/mo)', 'holdoverRate')}
                 </div>
                 <div style={{ ...s.grid2, marginBottom: '0.75rem' }}>
                   <label>
@@ -905,40 +1024,13 @@ export default function ContractsPage() {
 
       {/* Delete confirm dialog */}
       {deleteId !== null && (
-        <div style={s.dialog}>
-          <div style={s.dialogBox}>
-            <p style={{ margin: '0 0 0.75rem', fontWeight: 600, fontSize: '1rem' }}>
-              Delete this contract?
-            </p>
-            <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
-              This action cannot be undone.
-            </p>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-              <button
-                style={{
-                  ...s.actionBtn,
-                  backgroundColor: '#e5e7eb',
-                  color: '#111',
-                  padding: '0.5rem 1rem',
-                }}
-                onClick={() => setDeleteId(null)}
-              >
-                Cancel
-              </button>
-              <button
-                style={{
-                  ...s.actionBtn,
-                  backgroundColor: '#ef4444',
-                  color: '#fff',
-                  padding: '0.5rem 1rem',
-                }}
-                onClick={() => void handleDelete()}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete this contract?"
+          message="This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setDeleteId(null)}
+        />
       )}
     </div>
   );

@@ -13,6 +13,8 @@ export interface ReportSummary {
 export interface PropertyUnit {
   propertyId: string;
   propertyName: string;
+  ownerName: string;
+  ownerRent: number;
   income: number;
   expenses: number;
   netProfit: number;
@@ -21,6 +23,8 @@ export interface PropertyUnit {
 export interface PropertyPerformanceItem {
   propertyId: string;
   propertyName: string;
+  ownerName: string;
+  ownerRent: number;
   income: number;
   expenses: number;
   netProfit: number;
@@ -32,6 +36,7 @@ export interface MonthlyBreakdownItem {
   income: number;
   expenses: number;
   netProfit: number;
+  ownerRent: number;
   receivables: number;
   payables: number;
 }

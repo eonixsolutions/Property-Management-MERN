@@ -39,10 +39,10 @@ export interface IContract {
   leaseEnd?: Date;
   monthlyRent?: number;
   securityDeposit?: number;
-  lateFee?: string;
+  lateFee?: number;
   returnPeriod?: string;
   noticePeriod?: string;
-  holdoverRate?: string;
+  holdoverRate?: number;
   petsAllowed: boolean;
   petDeposit?: number;
   utilitiesResponsible?: UtilitiesResponsible;
@@ -71,6 +71,7 @@ export interface IContract {
 
   agreementDate?: Date;
 
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -122,10 +123,10 @@ const contractSchema = new Schema<IContract>(
     leaseEnd: Date,
     monthlyRent: { type: Number, min: 0 },
     securityDeposit: { type: Number, min: 0 },
-    lateFee: { type: String, trim: true },
+    lateFee: { type: Number, min: 0 },
     returnPeriod: { type: String, trim: true },
     noticePeriod: { type: String, trim: true },
-    holdoverRate: { type: String, trim: true },
+    holdoverRate: { type: Number, min: 0 },
     petsAllowed: { type: Boolean, default: false },
     petDeposit: { type: Number, min: 0 },
     utilitiesResponsible: {
@@ -160,6 +161,8 @@ const contractSchema = new Schema<IContract>(
     emergencyContactPhone: { type: String, trim: true },
 
     agreementDate: Date,
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

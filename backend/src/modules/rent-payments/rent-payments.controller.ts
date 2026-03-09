@@ -44,7 +44,7 @@ export const rentPaymentAccessMiddleware: RequestHandler = asyncHandler(async (r
   const id = req.params['id'] as string;
   validateObjectId(id, 'rent payment ID');
 
-  const payment = await RentPayment.findById(id).lean();
+  const payment = await RentPayment.findOne({ _id: id, isDeleted: { $ne: true } }).lean();
   if (!payment) {
     throw ApiError.notFound('Rent payment');
   }
@@ -83,7 +83,7 @@ export const listRentPayments: RequestHandler = asyncHandler(async (req, res) =>
   const skip = (page - 1) * limit;
 
   const { role, id: userId } = req.user!;
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
   // BL-04 data scoping through property
   const scopedIds = await getScopedPropertyIds(role, userId);
@@ -207,11 +207,11 @@ export const updateRentPayment: RequestHandler = asyncHandler(async (req, res) =
 /**
  * DELETE /api/rent-payments/:id
  *
- * Hard-deletes a rent payment record.
+ * Soft-deletes a rent payment record.
  */
 export const deleteRentPayment: RequestHandler = asyncHandler(async (req, res) => {
   const id = req.params['id'] as string;
-  await RentPayment.findByIdAndDelete(id);
+  await RentPayment.findByIdAndUpdate(id, { $set: { isDeleted: true } });
   return ApiResponse.noContent(res);
 });
 

@@ -17,6 +17,7 @@ export interface IOwnerCheque {
   issueDate?: Date;
   status: OwnerChequeStatus;
   notes?: string;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +71,8 @@ const ownerChequeSchema = new Schema<IOwnerCheque>(
       index: true,
     },
     notes: { type: String, trim: true },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

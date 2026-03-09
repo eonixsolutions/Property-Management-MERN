@@ -7,7 +7,28 @@
       "Bash(npm audit:*)",
       "Bash(npx tsc:*)",
       "Bash(npx eslint:*)",
-      "Bash(powershell -Command \"Get-Content ''d:/musP/Eonix/Live-Projects/property-management-php-to-mern/real-cpanel-prov1/contracts/index.php'' | Select-Object -Skip 300 -First 200 | Out-String -Width 200\")"
+      "Bash(powershell -Command \"Get-Content ''d:/musP/Eonix/Live-Projects/property-management-php-to-mern/real-cpanel-prov1/contracts/index.php'' | Select-Object -Skip 300 -First 200 | Out-String -Width 200\")",
+      "Bash(npm run seed:properties)",
+      "Bash(npm run seed:tenants)",
+      "Bash(npm run seed:rent-payments)",
+      "Bash(npx tsx src/scripts/seedOwnerPayments.ts)",
+      "Bash(PROP1_ID=69a3d8de61c43965a40b922a PROP6_ID=69a3da0f88f344801d5f0466 USER_ID=699ab74ebbad9f3a038c5e93 npx tsx src/scripts/seedOwnerPayments.ts)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(echo \"Backend exit: $?\")",
+      "Bash(echo \"Frontend exit: $?\")",
+      "Bash(echo \"Backend: $?\")",
+      "Bash(echo \"Frontend: $?\")",
+      "Bash(npm run seed:demo)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npm run build)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''scripts:'', json.dumps\\(d.get\\(''scripts'',{}\\), indent=2\\)\\); print\\(''deps:'', list\\(d.get\\(''dependencies'',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(mongosh property_db --eval \"db.maintenancerequests.deleteMany\\({}\\)\")",
+      "Bash(mongosh property_db --eval \"db.properties.find\\({}, {_id:1, name:1, type:1}\\).toArray\\(\\)\")",
+      "Bash(npm run migrate)",
+      "Bash(mongosh property_db --eval \"db.ownerpayments.countDocuments\\(\\)\")",
+      "Bash(mongosh property_db --eval \"db.ownerpayments.find\\({ chequeNumber: { $exists: true, $ne: null } }, { paymentMonth: 1, chequeNumber: 1, status: 1 }\\).toArray\\(\\)\")",
+      "Bash(mongosh property_db --eval \"db.properties.find\\({}, {name:1, _id:1}\\).toArray\\(\\)\")",
+      "Bash(mongosh property_db --eval \"db.properties.findOne\\({}, {name:1, _id:1, title:1}\\)\")"
     ]
   }
 }

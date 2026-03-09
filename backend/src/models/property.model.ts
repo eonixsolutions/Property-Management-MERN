@@ -8,7 +8,11 @@ import mongoose, { Schema, model } from 'mongoose';
 export const PROPERTY_TYPES = [
   'Apartment',
   'Villa',
+  'House',
+  'Condo',
+  'Penthouse',
   'Office',
+  'Commercial',
   'Shop',
   'Warehouse',
   'Land',
@@ -78,6 +82,7 @@ export interface IProperty {
 
   images: IPropertyImage[];
 
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -183,6 +188,8 @@ const propertySchema = new Schema<IProperty>(
     notes: { type: String, trim: true },
 
     images: { type: [imageSchema], default: [] },
+
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
@@ -199,9 +206,9 @@ export const Property = model<IProperty>('Property', propertySchema);
 
 // ── Compound indexes (Phase 12 performance) ────────────────────────────────
 // Support common filter combinations in list queries
-propertySchema.index({ userId: 1, status: 1 });       // owner's properties by status
-propertySchema.index({ userId: 1, type: 1 });          // owner's properties by type
-propertySchema.index({ userId: 1, createdAt: -1 });    // owner's sorted list
+propertySchema.index({ userId: 1, status: 1 }); // owner's properties by status
+propertySchema.index({ userId: 1, type: 1 }); // owner's properties by type
+propertySchema.index({ userId: 1, createdAt: -1 }); // owner's sorted list
 
 // ── Service function ───────────────────────────────────────────────────────
 
@@ -228,7 +235,11 @@ export async function updatePropertyStatus(
   if (property.status === 'Under Maintenance') return;
 
   const { Tenant } = await import('./tenant.model');
-  const activeCount = await Tenant.countDocuments({ propertyId: property._id, status: 'Active' });
+  const activeCount = await Tenant.countDocuments({
+    propertyId: property._id,
+    status: 'Active',
+    isDeleted: { $ne: true },
+  });
 
   property.status = activeCount > 0 ? 'Occupied' : 'Vacant';
   await property.save();

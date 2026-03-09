@@ -45,16 +45,23 @@ export const getReports: RequestHandler = asyncHandler(async (req, res) => {
   endDate.setHours(23, 59, 59, 999);
 
   // ── BL-04 scoping ──────────────────────────────────────────────────────────
-  const propOwnerFilter = isAdmin ? {} : { userId: uid };
+  const propOwnerFilter = isAdmin
+    ? { isDeleted: { $ne: true } }
+    : { userId: uid, isDeleted: { $ne: true } };
   const properties = await Property.find(propOwnerFilter)
-    .select('_id type propertyName parentPropertyId')
+    .select('_id type propertyName parentPropertyId owner')
     .lean();
 
   const propertyIds = properties.map((p) => p._id as mongoose.Types.ObjectId);
 
-  const txFilter = isAdmin ? {} : { userId: uid };
-  const rpFilter = isAdmin ? {} : { propertyId: { $in: propertyIds } };
-  const opFilter = isAdmin ? {} : { propertyId: { $in: propertyIds } };
+  const isDeletedFilter = { isDeleted: { $ne: true } };
+  const txFilter = isAdmin ? { ...isDeletedFilter } : { userId: uid, ...isDeletedFilter };
+  const rpFilter = isAdmin
+    ? { ...isDeletedFilter }
+    : { propertyId: { $in: propertyIds }, ...isDeletedFilter };
+  const opFilter = isAdmin
+    ? { ...isDeletedFilter }
+    : { propertyId: { $in: propertyIds }, ...isDeletedFilter };
 
   // ── Parallel aggregations ─────────────────────────────────────────────────
   const [
@@ -266,7 +273,12 @@ export const getReports: RequestHandler = asyncHandler(async (req, res) => {
   const propNameMap = new Map(
     properties.map((p) => [
       (p._id as mongoose.Types.ObjectId).toString(),
-      { name: p.propertyName, type: p.type, parentId: p.parentPropertyId?.toString() },
+      {
+        name: p.propertyName,
+        type: p.type,
+        parentId: p.parentPropertyId?.toString(),
+        ownerName: (p.owner as { name?: string } | undefined)?.name ?? '',
+      },
     ]),
   );
 
@@ -301,12 +313,16 @@ export const getReports: RequestHandler = asyncHandler(async (req, res) => {
     {
       propertyId: string;
       propertyName: string;
+      ownerName: string;
+      ownerRent: number;
       income: number;
       expenses: number;
       netProfit: number;
       units: Array<{
         propertyId: string;
         propertyName: string;
+        ownerName: string;
+        ownerRent: number;
         income: number;
         expenses: number;
         netProfit: number;
@@ -325,6 +341,8 @@ export const getReports: RequestHandler = asyncHandler(async (req, res) => {
       masterMap.set(pid, {
         propertyId: pid,
         propertyName: p.propertyName,
+        ownerName: propNameMap.get(pid)?.ownerName ?? '',
+        ownerRent: ownerMap.get(pid) ?? 0,
         income,
         expenses,
         netProfit: income - expenses,
@@ -344,6 +362,8 @@ export const getReports: RequestHandler = asyncHandler(async (req, res) => {
     const unitEntry = {
       propertyId: pid,
       propertyName: pData.name,
+      ownerName: pData.ownerName ?? '',
+      ownerRent: ownerMap.get(pid) ?? 0,
       income,
       expenses,
       netProfit: income - expenses,
@@ -409,6 +429,7 @@ export const getReports: RequestHandler = asyncHandler(async (req, res) => {
         income,
         expenses,
         netProfit: income - expenses,
+        ownerRent: ownerData.expenses,
         receivables: rentData.receivable,
         payables: ownerData.payable,
       };

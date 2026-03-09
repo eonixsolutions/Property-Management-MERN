@@ -6,7 +6,11 @@ import type { PaginationMeta } from './users.api';
 export const PROPERTY_TYPES = [
   'Apartment',
   'Villa',
+  'House',
+  'Condo',
+  'Penthouse',
   'Office',
+  'Commercial',
   'Shop',
   'Warehouse',
   'Land',
@@ -63,6 +67,8 @@ export interface ApiProperty {
   status: PropertyStatus;
   notes?: string;
   images: ApiPropertyImage[];
+  tenantCount?: number;
+  unitCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -72,6 +78,7 @@ export interface DropdownItem {
   label: string;
   type: 'master' | 'unit';
   parentPropertyId?: string;
+  ownerName?: string;
 }
 
 export interface ListPropertiesParams {
@@ -80,6 +87,7 @@ export interface ListPropertiesParams {
   type?: 'master' | 'unit';
   status?: PropertyStatus;
   search?: string;
+  parentPropertyId?: string;
 }
 
 export interface CreatePropertyInput {

@@ -179,68 +179,84 @@ function PropertyPerformanceTable({ rows }: { rows: PropertyPerformanceItem[] })
   }
 
   return (
-    <table style={s.table}>
-      <thead>
-        <tr>
-          <th style={s.th}>Property</th>
-          <th style={s.thRight}>Income</th>
-          <th style={s.thRight}>Expenses</th>
-          <th style={s.thRight}>Net Profit</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((prop) => (
-          <>
-            <tr
-              key={prop.propertyId}
-              style={{ cursor: prop.units.length > 0 ? 'pointer' : 'default' }}
-              onClick={() => prop.units.length > 0 && toggle(prop.propertyId)}
-            >
-              <td style={s.td}>
-                {prop.units.length > 0 && (
-                  <span style={{ marginRight: '0.4rem', fontSize: '0.68rem' }}>
-                    {expanded.has(prop.propertyId) ? '▼' : '▶'}
-                  </span>
-                )}
-                {prop.propertyName}
-                {prop.units.length > 0 && (
-                  <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', color: '#9ca3af' }}>
-                    ({prop.units.length} units)
-                  </span>
-                )}
-              </td>
-              <td style={s.tdRight}>{fmt(prop.income)}</td>
-              <td style={s.tdRight}>{fmt(prop.expenses)}</td>
-              <td
-                style={{
-                  ...s.tdRightBold,
-                  color: prop.netProfit >= 0 ? '#059669' : '#dc2626',
-                }}
+    <div style={{ overflowX: 'auto' }}>
+      <table style={s.table}>
+        <thead>
+          <tr>
+            <th style={s.th}>Property</th>
+            <th style={s.th}>Owner</th>
+            <th style={s.thRight}>Owner Rent</th>
+            <th style={s.thRight}>Income</th>
+            <th style={s.thRight}>Expenses</th>
+            <th style={s.thRight}>Net Profit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((prop) => (
+            <>
+              <tr
+                key={prop.propertyId}
+                style={{ cursor: prop.units.length > 0 ? 'pointer' : 'default' }}
+                onClick={() => prop.units.length > 0 && toggle(prop.propertyId)}
               >
-                {fmt(prop.netProfit)}
-              </td>
-            </tr>
-            {expanded.has(prop.propertyId) &&
-              prop.units.map((unit) => (
-                <tr key={unit.propertyId}>
-                  <td style={s.unitTd}>↳ {unit.propertyName}</td>
-                  <td style={s.unitTdRight}>{fmt(unit.income)}</td>
-                  <td style={s.unitTdRight}>{fmt(unit.expenses)}</td>
-                  <td
-                    style={{
-                      ...s.unitTdRight,
-                      fontWeight: 600,
-                      color: unit.netProfit >= 0 ? '#059669' : '#dc2626',
-                    }}
-                  >
-                    {fmt(unit.netProfit)}
-                  </td>
-                </tr>
-              ))}
-          </>
-        ))}
-      </tbody>
-    </table>
+                <td style={s.td}>
+                  {prop.units.length > 0 && (
+                    <span style={{ marginRight: '0.4rem', fontSize: '0.68rem' }}>
+                      {expanded.has(prop.propertyId) ? '▼' : '▶'}
+                    </span>
+                  )}
+                  {prop.propertyName}
+                  {prop.units.length > 0 && (
+                    <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', color: '#9ca3af' }}>
+                      ({prop.units.length} units)
+                    </span>
+                  )}
+                </td>
+                <td style={{ ...s.td, fontSize: '0.78rem', color: '#6b7280' }}>
+                  {prop.ownerName || '—'}
+                </td>
+                <td style={{ ...s.tdRight, color: '#7c3aed' }}>
+                  {prop.ownerRent > 0 ? fmt(prop.ownerRent) : '—'}
+                </td>
+                <td style={s.tdRight}>{fmt(prop.income)}</td>
+                <td style={s.tdRight}>{fmt(prop.expenses)}</td>
+                <td
+                  style={{
+                    ...s.tdRightBold,
+                    color: prop.netProfit >= 0 ? '#059669' : '#dc2626',
+                  }}
+                >
+                  {fmt(prop.netProfit)}
+                </td>
+              </tr>
+              {expanded.has(prop.propertyId) &&
+                prop.units.map((unit) => (
+                  <tr key={unit.propertyId}>
+                    <td style={s.unitTd}>↳ {unit.propertyName}</td>
+                    <td style={{ ...s.unitTd, paddingLeft: '0.75rem', color: '#9ca3af' }}>
+                      {unit.ownerName || '—'}
+                    </td>
+                    <td style={{ ...s.unitTdRight, color: '#7c3aed' }}>
+                      {unit.ownerRent > 0 ? fmt(unit.ownerRent) : '—'}
+                    </td>
+                    <td style={s.unitTdRight}>{fmt(unit.income)}</td>
+                    <td style={s.unitTdRight}>{fmt(unit.expenses)}</td>
+                    <td
+                      style={{
+                        ...s.unitTdRight,
+                        fontWeight: 600,
+                        color: unit.netProfit >= 0 ? '#059669' : '#dc2626',
+                      }}
+                    >
+                      {fmt(unit.netProfit)}
+                    </td>
+                  </tr>
+                ))}
+            </>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -336,6 +352,7 @@ export default function ReportsPage() {
                     <tr>
                       <th style={s.th}>Month</th>
                       <th style={s.thRight}>Income</th>
+                      <th style={s.thRight}>Owner Rent</th>
                       <th style={s.thRight}>Expenses</th>
                       <th style={s.thRight}>Net Profit</th>
                       <th style={s.thRight}>Receivables</th>
@@ -347,6 +364,9 @@ export default function ReportsPage() {
                       <tr key={row.month}>
                         <td style={s.td}>{fmtMonth(row.month)}</td>
                         <td style={s.tdRight}>{fmt(row.income)}</td>
+                        <td style={{ ...s.tdRight, color: '#7c3aed' }}>
+                          {row.ownerRent > 0 ? fmt(row.ownerRent) : '—'}
+                        </td>
                         <td style={s.tdRight}>{fmt(row.expenses)}</td>
                         <td
                           style={{
