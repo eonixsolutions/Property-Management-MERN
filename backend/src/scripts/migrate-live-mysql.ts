@@ -240,19 +240,20 @@ async function migrate() {
 
   // ── 4. Owner payments ────────────────────────────────────────────────────
   const [opRows] = await sql.query(
-    "SELECT * FROM owner_payments WHERE payment_month != '0000-00-00' ORDER BY id ASC",
+    'SELECT * FROM owner_payments ORDER BY id ASC',
   ) as [Row[], unknown];
 
   let opSkipped = 0;
   for (const o of opRows) {
     const propObjId = propMap.get(o['property_id'] as number);
-    if (!propObjId) { opSkipped++; continue; }
+    const paymentMonth = d(o['payment_month']);
+    if (!propObjId || !paymentMonth) { opSkipped++; continue; }
 
     const doc = await OwnerPayment.create({
       propertyId: propObjId,
       userId: adminId,
       amount: num(o['amount']) ?? 0,
-      paymentMonth: d(o['payment_month']) ?? new Date(),
+      paymentMonth,
       paidDate: d(o['paid_date']),
       chequeNumber: str(o['cheque_number']),
       paymentMethod: payMethod(o['payment_method']),
