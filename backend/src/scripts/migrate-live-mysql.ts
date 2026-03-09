@@ -158,41 +158,58 @@ async function migrate() {
   console.log(`\n✅ ${propRows.length} properties\n`);
 
   // ── 2. Tenants ───────────────────────────────────────────────────────────
+  // Use raw MongoDB insertMany to bypass post-save hooks (which cause
+  // OverwriteModelError via dynamic import of property.model inside the hook)
   const [tenantRows] = await sql.query(
     'SELECT * FROM tenants ORDER BY id ASC',
   ) as [Row[], unknown];
+
+  const db = mongoose.connection.db!;
+  const tenantDocs: Record<string, unknown>[] = [];
+  let tenantSkipped = 0;
 
   for (const t of tenantRows) {
     const propObjId = propMap.get(t['property_id'] as number);
     if (!propObjId) {
       console.warn(`  ⚠️  Tenant [${t['id']}] property ${t['property_id']} not found — skipped`);
+      tenantSkipped++;
       continue;
     }
-    const doc = await Tenant.create({
+    const newId = new mongoose.Types.ObjectId();
+    tenantMap.set(t['id'] as number, newId);
+    const now = new Date();
+    tenantDocs.push({
+      _id: newId,
       propertyId: propObjId,
       firstName: String(t['first_name']),
       lastName: String(t['last_name']),
-      email: str(t['email']),
-      phone: str(t['phone']),
-      alternatePhone: str(t['alternate_phone']),
-      qatarId: str(t['qatar_id']),
-      moveInDate: d(t['move_in_date']),
-      moveOutDate: d(t['move_out_date']),
-      leaseStart: d(t['lease_start']),
-      leaseEnd: d(t['lease_end']),
-      monthlyRent: num(t['monthly_rent']),
-      securityDeposit: num(t['security_deposit']),
-      status: String(t['status']) as 'Active' | 'Past' | 'Pending',
+      email: str(t['email']) ?? null,
+      phone: str(t['phone']) ?? null,
+      alternatePhone: str(t['alternate_phone']) ?? null,
+      qatarId: str(t['qatar_id']) ?? null,
+      moveInDate: d(t['move_in_date']) ?? null,
+      moveOutDate: d(t['move_out_date']) ?? null,
+      leaseStart: d(t['lease_start']) ?? null,
+      leaseEnd: d(t['lease_end']) ?? null,
+      monthlyRent: num(t['monthly_rent']) ?? null,
+      securityDeposit: num(t['security_deposit']) ?? null,
+      status: String(t['status']),
       emergencyContact: {
-        name: str(t['emergency_contact_name']),
-        phone: str(t['emergency_contact_phone']),
+        name: str(t['emergency_contact_name']) ?? null,
+        phone: str(t['emergency_contact_phone']) ?? null,
       },
-      notes: str(t['notes']),
+      notes: str(t['notes']) ?? null,
+      isDeleted: false,
+      createdAt: d(t['created_at']) ?? now,
+      updatedAt: d(t['updated_at']) ?? now,
     });
-    tenantMap.set(t['id'] as number, doc._id as mongoose.Types.ObjectId);
-    console.log(`  👤 [${t['id']}] "${t['first_name']} ${t['last_name']}" → ${doc._id}`);
+    console.log(`  👤 [${t['id']}] "${t['first_name']} ${t['last_name']}" → ${newId}`);
   }
-  console.log(`\n✅ ${tenantRows.length} tenants\n`);
+
+  if (tenantDocs.length > 0) {
+    await db.collection('tenants').insertMany(tenantDocs);
+  }
+  console.log(`\n✅ ${tenantDocs.length} tenants (${tenantSkipped} skipped)\n`);
 
   // ── 3. Rent payments ─────────────────────────────────────────────────────
   const [rpRows] = await sql.query(
