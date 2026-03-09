@@ -25,7 +25,8 @@
     "seed:tenants": "tsx src/scripts/seed-tenants.ts",
     "seed:rent-payments": "tsx src/scripts/seed-rent-payments.ts",
     "seed:demo": "tsx src/scripts/seed-demo.ts",
-    "migrate": "tsx src/scripts/migrate-from-mysql.ts"
+    "migrate": "tsx src/scripts/migrate-from-mysql.ts",
+    "migrate:live": "tsx src/scripts/migrate-live-mysql.ts"
   },
   "dependencies": {
     "@types/multer": "^2.0.0",
@@ -40,6 +41,7 @@
     "jsonwebtoken": "^9.0.3",
     "module-alias": "^2.3.4",
     "mongoose": "^8.10.1",
+    "mysql2": "^3.11.0",
     "multer": "^2.0.2",
     "node-cache": "^5.1.2",
     "node-cron": "^4.2.1",
