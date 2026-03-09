@@ -14,7 +14,8 @@
  * the HTTP server or opening a DB connection.
  */
 
-import 'dotenv/config'; // Must be first — loads .env before any other import
+import 'module-alias/register'; // Must be first — registers path aliases for production build
+import 'dotenv/config'; // Must be second — loads .env before any other import
 import { env } from './config/env';
 import { connectDB, disconnectDB } from './config/database';
 import { createApp } from './app';
