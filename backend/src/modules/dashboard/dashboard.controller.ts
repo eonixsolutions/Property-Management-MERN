@@ -270,12 +270,15 @@ export const getDashboard: RequestHandler = asyncHandler(async (req, res) => {
 
   // ── Build property stats ───────────────────────────────────────────────────
   const total = properties.length;
-  const occupied = properties.filter((p) => p.status === 'Occupied').length;
-  const vacant = properties.filter((p) => p.status === 'Vacant').length;
-  const underMaintenance = properties.filter((p) => p.status === 'Under Maintenance').length;
   const masters = properties.filter((p) => p.type === 'master').length;
   const units = properties.filter((p) => p.type === 'unit').length;
-  const occupancyRate = total > 0 ? Math.round((occupied / total) * 100) : 0;
+  // Occupancy is measured on units only — master properties are containers, not rentable units
+  const occupied = properties.filter((p) => p.type === 'unit' && p.status === 'Occupied').length;
+  const vacant = properties.filter((p) => p.type === 'unit' && p.status === 'Vacant').length;
+  const underMaintenance = properties.filter(
+    (p) => p.type === 'unit' && p.status === 'Under Maintenance',
+  ).length;
+  const occupancyRate = units > 0 ? Math.round((occupied / units) * 100) : 0;
   // Sum only master properties — units are subdivisions of masters, summing both would double-count
   const totalPropertyValue = properties
     .filter((p) => p.type === 'master')
