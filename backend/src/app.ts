@@ -28,6 +28,9 @@ import { apiRouter } from './routes/index';
 export function createApp(): Application {
   const app = express();
 
+  // Trust the first proxy (Apache/Nginx) so express-rate-limit and req.ip work correctly behind a reverse proxy
+  app.set('trust proxy', 1);
+
   // ── 1. Security headers ──────────────────────────────────────────────────
   // Replicates PHP .htaccess security headers:
   //   X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy
